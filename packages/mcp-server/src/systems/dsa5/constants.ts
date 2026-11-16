@@ -6,20 +6,24 @@
  */
 
 /**
- * Erfahrungsgrad-Definitionen (DSA5 "Levels")
- * Quelle: https://dsa.ulisses-regelwiki.de/Heldenerschaffung.html
+ * Erfahrungsgrad (experience grade) by total Abenteuerpunkte.
  *
- * WICHTIG: Level 1-7, nicht 0-6!
- * DSA5 startet bei Level 1 (Unerfahren), genau wie D&D5e bei Level 1
+ * The grades are the starting AP of hero creation (900 / 1000 / 1100 / 1200 / 1400 /
+ * 1700 / 2100, `DSA5.startXP` in the system); a hero counts as a grade once the total
+ * AP reach its threshold, which is how the system's own
+ * `DSA5_Utility.experienceDescription` labels an actor. Everything below 1000 AP is
+ * "Unerfahren".
+ *
+ * Levels are numbered 1-7 so they can stand in for a power level.
  */
 export const EXPERIENCE_LEVELS = [
-  { name: 'Unerfahren', nameEn: 'Inexperienced', min: 0, max: 900, level: 1 },
-  { name: 'Durchschnittlich', nameEn: 'Average', min: 901, max: 1800, level: 2 },
-  { name: 'Erfahren', nameEn: 'Experienced', min: 1801, max: 2700, level: 3 },
-  { name: 'Kompetent', nameEn: 'Competent', min: 2701, max: 3600, level: 4 },
-  { name: 'Meisterlich', nameEn: 'Masterful', min: 3601, max: 4500, level: 5 },
-  { name: 'Brillant', nameEn: 'Brilliant', min: 4501, max: 5400, level: 6 },
-  { name: 'Legendär', nameEn: 'Legendary', min: 5401, max: Infinity, level: 7 },
+  { name: 'Unerfahren', nameEn: 'Inexperienced', min: 0, max: 999, level: 1 },
+  { name: 'Durchschnittlich', nameEn: 'Average', min: 1000, max: 1099, level: 2 },
+  { name: 'Erfahren', nameEn: 'Experienced', min: 1100, max: 1199, level: 3 },
+  { name: 'Kompetent', nameEn: 'Competent', min: 1200, max: 1399, level: 4 },
+  { name: 'Meisterlich', nameEn: 'Masterful', min: 1400, max: 1699, level: 5 },
+  { name: 'Brillant', nameEn: 'Brilliant', min: 1700, max: 2099, level: 6 },
+  { name: 'Legendär', nameEn: 'Legendary', min: 2100, max: Infinity, level: 7 },
 ] as const;
 
 /**
@@ -34,7 +38,7 @@ export type DSA5ExperienceLevel = (typeof EXPERIENCE_LEVELS)[number];
  */
 export function getExperienceLevel(totalAP: number): DSA5ExperienceLevel {
   for (const level of EXPERIENCE_LEVELS) {
-    if (totalAP >= level.min && totalAP <= level.max) {
+    if (totalAP <= level.max) {
       return level;
     }
   }
@@ -104,9 +108,31 @@ export const SIZE_MAP_EN_TO_DE: Record<string, string> = {
 };
 
 /**
+ * The system's size categories (`DSA5.sizeCategories`) and the names callers tend to use
+ * for them. Keys are lowercase.
+ */
+export const SIZE_CATEGORY_ALIASES: Record<string, string> = {
+  tiny: 'tiny',
+  winzig: 'tiny',
+  small: 'small',
+  klein: 'small',
+  average: 'average',
+  medium: 'average',
+  mittel: 'average',
+  big: 'big',
+  large: 'big',
+  groß: 'big',
+  gross: 'big',
+  giant: 'giant',
+  huge: 'giant',
+  gargantuan: 'giant',
+  riesig: 'giant',
+  gigantisch: 'giant',
+};
+
+/**
  * Common DSA5 field paths for system data access
- * Based on template.json reverse engineering from:
- * https://github.com/Plushtoast/dsa5-foundryVTT/blob/master/template.json
+ * Checked against the system's data models (dsa5-foundryVTT, modules/data/actor).
  */
 export const FIELD_PATHS = {
   // Characteristics (Eigenschaften)
@@ -122,14 +148,14 @@ export const FIELD_PATHS = {
 
   // Status values
   STATUS_WOUNDS: 'system.status.wounds',
-  STATUS_WOUNDS_CURRENT: 'system.status.wounds.current', // ACTUAL current LeP
-  STATUS_WOUNDS_MAX: 'system.status.wounds.max',
+  STATUS_WOUNDS_VALUE: 'system.status.wounds.value', // current LeP
+  STATUS_WOUNDS_MAX: 'system.status.wounds.max', // derived at runtime
   STATUS_ASTRAL: 'system.status.astralenergy',
   STATUS_KARMA: 'system.status.karmaenergy',
   STATUS_SPEED: 'system.status.speed',
   STATUS_INITIATIVE: 'system.status.initiative',
   STATUS_DODGE: 'system.status.dodge',
-  STATUS_ARMOR: 'system.status.armour',
+  TOTAL_ARMOR: 'system.totalArmor', // derived from worn armor at runtime
 
   // Details
   DETAILS_SPECIES: 'system.details.species.value',

@@ -100,26 +100,35 @@ systems/dsa5/
 
 ## DSA5 Field Mappings
 
+Checked against the system's data models (dsa5-foundryVTT 8.x, `modules/data/actor`).
+Many values the sheet shows are **derived at runtime** and are not stored on the actor;
+writing them has no effect. `manage-actors` therefore maps its shorthands onto the stored
+parts (see `describeActorSchema` in `adapter.ts`).
+
 ### Eigenschaften (8 Attributes)
 
 ```
-system.characteristics.mu.value  → MU (Mut/Courage)
-system.characteristics.kl.value  → KL (Klugheit/Cleverness)
-system.characteristics.in.value  → IN (Intuition)
-system.characteristics.ch.value  → CH (Charisma)
-system.characteristics.ff.value  → FF (Fingerfertigkeit/Dexterity)
-system.characteristics.ge.value  → GE (Gewandtheit/Agility)
-system.characteristics.ko.value  → KO (Konstitution/Constitution)
-system.characteristics.kk.value  → KK (Körperkraft/Strength)
+system.characteristics.<mu|kl|in|ch|ff|ge|ko|kk>
+  .initial   stored   base value (default 8)
+  .advances  stored   purchased increases
+  .modifier  stored   temporary modifier
+  .value     derived  initial + advances + modifier + gear
 ```
+
+MU Mut/Courage, KL Klugheit/Cleverness, IN Intuition, CH Charisma, FF Fingerfertigkeit/Dexterity,
+GE Gewandtheit/Agility, KO Konstitution/Constitution, KK Körperkraft/Strength.
 
 ### Status & Resources
 
 ```
-system.status.wounds.value       → Current wounds (NOT inverted in v0.6.1!)
-system.status.wounds.max         → Maximum life points
-system.status.astralenergy.*     → AsP (Astral energy)
-system.status.karmaenergy.*      → KaP (Karma energy)
+system.status.wounds.value        stored   current LeP
+system.status.wounds.initial      stored   base LeP (creatures: the whole pool)
+system.status.wounds.max          derived  character/npc: initial + 2×KO + advances + modifier
+                                           creature:      initial + advances + modifier
+system.status.wounds.current      derived  intermediate base of that formula, NOT the current LeP
+system.status.astralenergy.*      AsP, same layout (value = current, max derived)
+system.status.karmaenergy.*       KaP, same layout
+system.status.fatePoints.value    stored   Schicksalspunkte left (.current = base maximum)
 ```
 
 ### Profile
@@ -129,37 +138,46 @@ system.details.species.value     → Species (Mensch, Elf, Zwerg...)
 system.details.culture.value     → Culture
 system.details.career.value      → Profession (IMPORTANT: "career", not "profession"!)
 system.details.experience.total  → Total Adventure Points (AP)
+system.details.experience.spent  → Spent AP (available = total − spent, derived)
+system.creatureClass.value       → Creature class (creatures only)
 ```
 
 ### Combat
 
 ```
-system.status.size.value         → Size in cm
-system.status.parry.value        → Melee defense (Parade)
-system.status.dodge.value        → Ranged defense (Ausweichen)
+system.status.size.value          tiny | small | average | big | giant
+system.status.speed.initial       stored   base GS (.max derived)
+system.status.initiative.current  stored   base INI of a creature
+system.status.initiative.value    derived  heroes: (MU + GE) / 2 + modifier
+system.status.dodge.max           derived  GE / 2 + modifier (all actor types)
+system.status.soulpower.max       derived  SK (creatures store .value)
+system.status.toughness.max       derived  ZK (creatures store .value)
+system.totalArmor                 derived  RS from equipped armor items
 ```
 
 ### Skills/Talente
 
 ```
-Items with type: "skill" or "talent"
+Items with type "skill" (Talent) or "combatskill" (Kampftechnik)
 Value: item.system.talentValue.value
-Check: item.system.characteristic (e.g., "MU/IN/CH")
+Check: item.system.characteristic1..3.value (e.g. kl / kl / in)
 ```
 
 ## Experience Levels (Erfahrungsgrad)
 
-DSA5 uses a 7-level experience classification based on total Adventure Points (AP):
+DSA5 classifies heroes by their total Adventure Points (AP). The thresholds are the
+starting AP of hero creation and match the system's own
+`DSA5_Utility.experienceDescription`:
 
 | Level | Name (DE)        | Name (EN)     | AP Range    |
 | ----- | ---------------- | ------------- | ----------- |
-| 1     | Unerfahren       | Inexperienced | 0 - 899     |
-| 2     | Durchschnittlich | Average       | 900 - 1999  |
-| 3     | Erfahren         | Experienced   | 2000 - 2999 |
-| 4     | Kompetent        | Competent     | 3000 - 3999 |
-| 5     | Meisterlich      | Masterful     | 4000 - 4999 |
-| 6     | Brillant         | Brilliant     | 5000 - 5999 |
-| 7     | Legendär         | Legendary     | 6000+       |
+| 1     | Unerfahren       | Inexperienced | 0 - 999     |
+| 2     | Durchschnittlich | Average       | 1000 - 1099 |
+| 3     | Erfahren         | Experienced   | 1100 - 1199 |
+| 4     | Kompetent        | Competent     | 1200 - 1399 |
+| 5     | Meisterlich      | Masterful     | 1400 - 1699 |
+| 6     | Brillant         | Brilliant     | 1700 - 2099 |
+| 7     | Legendär         | Legendary     | 2100+       |
 
 ## Usage Examples
 

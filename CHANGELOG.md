@@ -4,6 +4,10 @@
 
 - **DSA5 structured journals** — `dsa5-journal-read` and `dsa5-journal-manage` read and maintain the DSA5 system's own journal pages, which hold structured entries rather than text and were invisible to the generic journal tools: Dramatis Personae (NPCs and creatures with faction, tags, a linked actor, notes and their relationship to each hero), the quest log (status, priority, audience, dates, objectives, linked actors / items / journals), almanac events, and city details (temples, inns, merchants, … with quality and price level). The AP and money logs can be read. Entries are written through the system, so linking a persona to an actor fills it in as it does in Foundry, notes go to the linked actor when the entry links them, and a journal created by the tool shows up in the DSA5 almanac. Writing needs Allow Write Operations. DSA5 worlds only.
 
+### Fixes
+
+- **DSA5 character data in `get-character` and `manage-actors`** — the DSA5 adapter read and wrote fields that the current system (8.x) derives at runtime or does not have. `get-character` reported the maximum LeP as the current LeP and used wrong AP thresholds for the Erfahrungsgrad (a 1250 AP hero showed as "Durchschnittlich" instead of "Kompetent"); it now reads the current LeP from `wounds.value`, uses the system's thresholds (1000 / 1100 / 1200 / 1400 / 1700 / 2100 AP), and also returns AsP, KaP, Schicksalspunkte, Seelenkraft, Zähigkeit, armor, trained Talente and raised Kampftechniken, plus a filled `basicInfo`. In `manage-actors`, shorthands such as `characteristics: { MU: 14 }`, `lifePoints`, `initiative`, `dodge` and `size` silently had no effect because they were written to derived fields; they are now mapped onto the stored parts the system computes those values from (`initial` / `advances`, `wounds.initial`, the dodge modifier, the system's size categories), and `action: "describe"` documents which values can be set and how. DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features

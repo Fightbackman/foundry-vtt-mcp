@@ -17,7 +17,12 @@ import {
   describeDSA5Filters,
   type DSA5Filters,
 } from './filters.js';
-import { FIELD_PATHS, getExperienceLevel, EIGENSCHAFT_NAMES } from './constants.js';
+import {
+  FIELD_PATHS,
+  getExperienceLevel,
+  EIGENSCHAFT_NAMES,
+  SIZE_CATEGORY_ALIASES,
+} from './constants.js';
 
 /**
  * DSA5 system adapter
@@ -93,13 +98,13 @@ export class DSA5Adapter implements SystemAdapter {
 
       // Status values
       wounds: FIELD_PATHS.STATUS_WOUNDS,
-      lifePoints: FIELD_PATHS.STATUS_WOUNDS_CURRENT, // wounds.current has actual LeP
+      lifePoints: FIELD_PATHS.STATUS_WOUNDS_VALUE, // wounds.value holds the current LeP
       astralenergy: FIELD_PATHS.STATUS_ASTRAL,
       karmaenergy: FIELD_PATHS.STATUS_KARMA,
       speed: FIELD_PATHS.STATUS_SPEED,
       initiative: FIELD_PATHS.STATUS_INITIATIVE,
       dodge: FIELD_PATHS.STATUS_DODGE,
-      armor: FIELD_PATHS.STATUS_ARMOR,
+      armor: FIELD_PATHS.TOTAL_ARMOR, // derived from worn armor; not stored on the actor
 
       // Tradition
       tradition: FIELD_PATHS.TRADITION,
@@ -241,56 +246,85 @@ export class DSA5Adapter implements SystemAdapter {
   }
 
   /**
+   * Effective value of an Eigenschaft. The system derives `value` at runtime
+   * (initial + advances + modifier + gear); source data only stores the parts.
+   */
+  private static characteristicValue(characteristic: any): number {
+    if (typeof characteristic?.value === 'number') return characteristic.value;
+    return (
+      (characteristic?.initial ?? 8) +
+      (characteristic?.advances ?? 0) +
+      (characteristic?.modifier ?? 0)
+    );
+  }
+
+  /**
+   * A pool the actor has: its current points and derived maximum.
+   * LeP, AsP and KaP all keep the current points in `value`; `current` is an
+   * intermediate base value the system computes, not the current points.
+   */
+  private static pool(resource: any): { current: number; max: number } | undefined {
+    if (!resource) return undefined;
+    return { current: resource.value ?? 0, max: resource.max ?? 0 };
+  }
+
+  private static experience(system: any) {
+    const total = system.details?.experience?.total ?? 0;
+    const spent = system.details?.experience?.spent ?? 0;
+    const grade = getExperienceLevel(total);
+    return {
+      total,
+      spent,
+      available: total - spent,
+      level: grade.level,
+      levelName: grade.name,
+      levelNameEn: grade.nameEn,
+    };
+  }
+
+  /** Magical / clerical tradition names, leaving out the empty defaults. */
+  private static tradition(system: any): Record<string, string> {
+    const tradition: Record<string, string> = {};
+    for (const kind of ['magical', 'clerical'] as const) {
+      const name = system.tradition?.[kind];
+      if (typeof name === 'string' && name.trim()) tradition[kind] = name;
+    }
+    return tradition;
+  }
+
+  /**
    * Extract character statistics from actor data
    */
   extractCharacterStats(actorData: any): any {
     const system = actorData.system || {};
+    const status = system.status || {};
     const stats: any = {};
 
     // Basic info
     stats.name = actorData.name;
     stats.type = actorData.type;
 
-    // Experience and Level
-    const totalAP = system.details?.experience?.total ?? 0;
-    const spentAP = system.details?.experience?.spent ?? 0;
-
-    if (totalAP > 0) {
-      const expLevel = getExperienceLevel(totalAP);
-      stats.experience = {
-        total: totalAP,
-        spent: spentAP,
-        available: totalAP - spentAP,
-        level: expLevel.level,
-        levelName: expLevel.name,
-        levelNameEn: expLevel.nameEn,
-      };
+    // Experience and Erfahrungsgrad (creatures have no AP)
+    if (system.details?.experience && actorData.type !== 'creature') {
+      stats.experience = DSA5Adapter.experience(system);
     }
 
-    // LeP (Lebensenergie) - wounds.current contains actual current LeP
-    const wounds = system.status?.wounds;
-    if (wounds) {
-      stats.lifePoints = {
-        current: wounds.current ?? 0,
-        max: wounds.max ?? 0,
-      };
-    }
+    // LeP (Lebensenergie): wounds.value is the current LeP, wounds.max the derived maximum
+    const lifePoints = DSA5Adapter.pool(status.wounds);
+    if (lifePoints) stats.lifePoints = lifePoints;
 
-    // AsP (Astralenergie)
-    const astral = system.status?.astralenergy;
-    if (astral && astral.max > 0) {
-      stats.astralEnergy = {
-        current: astral.value ?? 0,
-        max: astral.max ?? 0,
-      };
-    }
+    // AsP / KaP, only for actors that have them
+    const astral = DSA5Adapter.pool(status.astralenergy);
+    if (astral && astral.max > 0) stats.astralEnergy = astral;
 
-    // KaP (Karmaenergie)
-    const karma = system.status?.karmaenergy;
-    if (karma && karma.max > 0) {
-      stats.karmaEnergy = {
-        current: karma.value ?? 0,
-        max: karma.max ?? 0,
+    const karma = DSA5Adapter.pool(status.karmaenergy);
+    if (karma && karma.max > 0) stats.karmaEnergy = karma;
+
+    // Schicksalspunkte: `value` is what is left, `max` is derived (falls back to the base)
+    if (status.fatePoints) {
+      stats.fatePoints = {
+        current: status.fatePoints.value ?? 0,
+        max: status.fatePoints.max ?? status.fatePoints.current ?? 0,
       };
     }
 
@@ -301,33 +335,38 @@ export class DSA5Adapter implements SystemAdapter {
         const eigenschaftData = eigenschaft as any;
         const upperKey = key.toUpperCase();
         stats.characteristics[upperKey] = {
-          value: eigenschaftData.value ?? 8,
+          value: DSA5Adapter.characteristicValue(eigenschaftData),
           initial: eigenschaftData.initial ?? 8,
+          advances: eigenschaftData.advances ?? 0,
           name: EIGENSCHAFT_NAMES[upperKey]?.german,
           nameEn: EIGENSCHAFT_NAMES[upperKey]?.english,
         };
       }
     }
 
-    // Combat values
-    const initiative = system.status?.initiative?.value ?? system.status?.initiative;
-    if (initiative !== undefined) {
-      stats.initiative = initiative;
+    // Derived values. Where the system computes a `max` (value + modifiers), that is
+    // the number rolled against, so prefer it.
+    const derived = (resource: any): number | undefined => {
+      if (typeof resource === 'number') return resource;
+      return resource?.max ?? resource?.value;
+    };
+
+    const initiative = status.initiative?.value ?? status.initiative;
+    if (typeof initiative === 'number') stats.initiative = initiative;
+
+    for (const [key, resource] of [
+      ['speed', status.speed],
+      ['dodge', status.dodge],
+      ['soulPower', status.soulpower],
+      ['toughness', status.toughness],
+    ] as const) {
+      const value = derived(resource);
+      if (value !== undefined) stats[key] = value;
     }
 
-    const speed = system.status?.speed?.value ?? system.status?.speed;
-    if (speed !== undefined) {
-      stats.speed = speed;
-    }
-
-    const dodge = system.status?.dodge?.value ?? system.status?.dodge;
-    if (dodge !== undefined) {
-      stats.dodge = dodge;
-    }
-
-    const armor = system.status?.armour?.value ?? system.status?.armor?.value ?? 0;
-    if (armor) {
-      stats.armor = armor;
+    // Rüstungsschutz is derived from worn armor
+    if (typeof system.totalArmor === 'number' && system.totalArmor > 0) {
+      stats.armor = system.totalArmor;
     }
 
     // Identity info
@@ -354,78 +393,148 @@ export class DSA5Adapter implements SystemAdapter {
       }
     }
 
-    // Size
-    const size = system.status?.size?.value;
+    // Creatures describe themselves by class instead of species/culture/profession
+    const creatureClass = system.creatureClass?.value;
+    if (creatureClass) stats.creatureClass = creatureClass;
+
+    // Size category (tiny, small, average, big, giant)
+    const size = status.size?.value;
     if (size) {
       stats.size = size;
     }
 
     // Tradition (magical/clerical)
-    if (system.tradition) {
-      const tradition: any = {};
-
-      if (system.tradition.magical) {
-        tradition.magical = system.tradition.magical;
-      }
-
-      if (system.tradition.clerical) {
-        tradition.clerical = system.tradition.clerical;
-      }
-
-      if (Object.keys(tradition).length > 0) {
-        stats.tradition = tradition;
-      }
+    const tradition = DSA5Adapter.tradition(system);
+    if (Object.keys(tradition).length > 0) {
+      stats.tradition = tradition;
     }
 
-    // Spellcasting detection
-    const hasSpells = !!(astral?.max || karma?.max || system.tradition);
-    if (hasSpells) {
-      stats.spellcasting = {
-        hasSpells: true,
-        hasAstralEnergy: !!astral?.max,
-        hasKarmaEnergy: !!karma?.max,
+    // Spellcasting: the actor has AsP/KaP or a tradition
+    const hasAstralEnergy = !!astral && astral.max > 0;
+    const hasKarmaEnergy = !!karma && karma.max > 0;
+    if (hasAstralEnergy || hasKarmaEnergy || Object.keys(tradition).length > 0) {
+      stats.spellcasting = { hasSpells: true, hasAstralEnergy, hasKarmaEnergy };
+    }
+
+    // Talente and Kampftechniken are items on the actor
+    const skills: Record<string, { value: number; check: string }> = {};
+    const combatSkills: Record<string, number> = {};
+    for (const item of Array.isArray(actorData.items) ? actorData.items : []) {
+      const value = item?.system?.talentValue?.value;
+      if (typeof value !== 'number') continue;
+      if (item.type === 'combatskill') {
+        // Every Kampftechnik starts at 6; only raised ones are worth listing.
+        if (value > 6) combatSkills[item.name] = value;
+      } else if (item.type === 'skill' && value > 0) {
+        const check = [1, 2, 3]
+          .map(index => String(item.system[`characteristic${index}`]?.value ?? '').toUpperCase())
+          .filter(Boolean)
+          .join('/');
+        skills[item.name] = { value, check };
+      }
+    }
+    // Only trained Talente are listed; every hero owns all of them at 0 (Kampftechniken at 6).
+    if (Object.keys(skills).length > 0) stats.skills = skills;
+    if (Object.keys(combatSkills).length > 0) stats.combatSkills = combatSkills;
+
+    return stats;
+  }
+
+  /**
+   * The values a GM looks at first: pools, Erfahrungsgrad, and who the actor is.
+   */
+  extractBasicInfo(actorData: any): any {
+    const system = actorData.system || {};
+    const status = system.status || {};
+    const basicInfo: any = {};
+
+    const lifePoints = DSA5Adapter.pool(status.wounds);
+    if (lifePoints) basicInfo.lifePoints = lifePoints;
+
+    const astral = DSA5Adapter.pool(status.astralenergy);
+    if (astral && astral.max > 0) basicInfo.astralEnergy = astral;
+
+    const karma = DSA5Adapter.pool(status.karmaenergy);
+    if (karma && karma.max > 0) basicInfo.karmaEnergy = karma;
+
+    if (status.fatePoints) {
+      basicInfo.fatePoints = {
+        current: status.fatePoints.value ?? 0,
+        max: status.fatePoints.max ?? status.fatePoints.current ?? 0,
       };
     }
 
-    return stats;
+    if (system.details?.experience && actorData.type !== 'creature') {
+      const experience = DSA5Adapter.experience(system);
+      basicInfo.experienceLevel = experience.levelName;
+      basicInfo.experienceLevelEn = experience.levelNameEn;
+      basicInfo.adventurePoints = { total: experience.total, available: experience.available };
+    }
+
+    for (const [key, value] of [
+      ['species', system.details?.species?.value],
+      ['culture', system.details?.culture?.value],
+      ['profession', system.details?.career?.value],
+      ['creatureClass', system.creatureClass?.value],
+      ['size', status.size?.value],
+    ] as const) {
+      if (value) basicInfo[key] = value;
+    }
+
+    return basicInfo;
   }
 
   describeActorSchema(): string {
     return [
       '=== DSA5 Actor Schema Reference ===',
       '',
-      'ACTOR TYPES: character, npc, creature',
+      'ACTOR TYPES: character (Held), npc (NSC), creature (Tier/Kreatur)',
       '',
-      'EIGENSCHAFTEN (characteristics) — system.characteristics:',
-      '  Shorthand: { MU:13, KL:12, IN:14, CH:11, FF:10, GE:11, KO:12, KK:13 }',
-      '    (uppercase or lowercase; naked number → {value, initial}, or {value, initial, advances?})',
-      '  Full:      { mu:{initial:13,value:13}, kl:{initial:12,value:12}, ... }',
-      '  Keys: mu, kl, in, ch, ff, ge, ko, kk  (value is derived; writing `initial` suffices)',
+      'EIGENSCHAFTEN (characteristics) — system.characteristics.<mu|kl|in|ch|ff|ge|ko|kk>:',
+      '  Stored parts: initial (default 8), advances, modifier, species. The effective value is',
+      '  derived by the system: initial + advances + modifier (+ gear); there is no stored `value`.',
+      '  Shorthand: { MU:13, KL:12, ... } (any case) sets the value: initial=13, advances=0.',
+      '  Full:      { mu:{initial:8, advances:5}, ... } to keep purchased advances separate.',
       '',
-      'LEBENSKRAFT / ENERGIE (status) — system.status:',
-      '  LeP:  { lifePoints:{current, max} } or {status:{lifePoints:{...}}} → status.wounds.{current,max}',
-      '  AsP:  { astralenergy:{current,max} } or {status:{astralenergy:{...}}} → status.astralenergy',
-      '  KaP:  { karmaenergy:{current,max} } or {status:{karmaenergy:{...}}} → status.karmaenergy',
-      '  Note: status.wounds.max is derived at runtime (initial + KO×2 + advances); a hard max may be overwritten.',
+      'LEBENSENERGIE / ENERGIE — system.status:',
+      '  wounds.value = CURRENT LeP; astralenergy.value = current AsP; karmaenergy.value = current KaP.',
+      '  The maxima are derived and cannot be written directly:',
+      '    character/npc: LeP max = wounds.initial + 2×KO + wounds.advances + wounds.modifier',
+      '                   AsP/KaP max = initial + guide characteristic × factor + advances + modifier',
+      '    creature:      max = initial + advances + modifier',
+      '  Shorthand: lifePoints / astralEnergy / karmaEnergy as a number or {current, max}.',
+      '    `current` → <pool>.value. `max` → <pool>.initial for creatures; for character/npc LeP',
+      '    it becomes wounds.initial = max − 2×KO when KO is in the same payload, and is',
+      '    otherwise ignored (set wounds.initial / advances / modifier yourself).',
+      '  fatePoints {current, max}: current → status.fatePoints.value, max → status.fatePoints.current.',
       '',
-      'DETAILS (identity / details) — system.details:',
-      '  species/culture/career accept a string or {value}: { species:"Mensch", culture:"Mittelreich", profession:"Krieger" }',
-      '  `profession` → details.career.value; `identity.*` → details.*; experience.{total,spent,available}',
+      'DETAILS — system.details:',
+      '  species / culture / career take a string or {value}: { species:"Mensch", culture:"Mittelreich", profession:"Krieger" }',
+      '  `profession` → details.career.value. socialstate is 0-5. experience: {total, spent}',
+      '  (available AP = total − spent, derived).',
       '',
-      'KAMPF / STATUS (optional shorthands) —',
-      '  initiative, speed, dodge, size, armour|armor → status.<key>.value  (size:string → {value}, armour→armour)',
-      '  tradition → system.tradition (object passed through)',
+      'KAMPF / STATUS —',
+      '  size: tiny | small | average | big | giant (medium/large/huge and German names are mapped)',
+      '  speed → status.speed.initial (base GS).',
+      '  initiative → status.initiative.current, the base INI of a creature (heroes derive INI from MU and GE).',
+      '  dodge is always derived (GE / 2 + status.dodge.modifier); a `dodge` number is turned into that',
+      '  modifier on create, and on update when GE is in the same payload.',
+      '  soulpower / toughness → status.<key>.value for creatures; derived for character/npc, where only',
+      '  status.<key>.initial or .modifier have an effect.',
+      '  Rüstungsschutz is derived from equipped armor items; there is no armor field on the actor.',
+      '  tradition → system.tradition {magical, clerical}; guidevalue {magical, clerical} names the',
+      '  Leiteigenschaft (mu…kk) that AsP/KaP are computed from.',
       '',
-      'ACTOR TYPES: character (Held), npc (NSC), creature (Tier/Kreatur).',
-      'ITEMS: advantage, disadvantage, combatskill, talent, spell, liturgy, equipment, weapon, armor, etc.',
+      'ITEMS: skill (Talent), combatskill, spell, liturgy, ritual, ceremony, advantage, disadvantage,',
+      '  specialability, meleeweapon, rangeweapon, armor, equipment, trait (creatures), …',
+      '  Talent / Kampftechnik values live on the item: system.talentValue.value.',
     ].join('\n');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // normalizePayload – map caller-friendly DSA5 shorthands onto the real
-  // Foundry DSA5 system paths before the payload is sent to the server.
-  // Receives ONLY the `system` sub-object and returns a normalised `system`
-  // object.  Unknown keys are left untouched.
+  // normalizePayload – map caller-friendly DSA5 shorthands onto the fields the
+  // DSA5 data model actually stores. Receives ONLY the `system` sub-object and
+  // returns a normalised `system` object. Unknown keys are left untouched.
   // ─────────────────────────────────────────────────────────────────────────
 
   /**
@@ -443,59 +552,64 @@ export class DSA5Adapter implements SystemAdapter {
   ] as const;
 
   /**
-   * Normalise a single Eigenschaft entry to {value, initial?, advances?}.
-   * Accepts:
-   *   - naked number  →  { value: n, initial: n }
-   *   - { value, initial?, advances? }
-   * If `value` is missing but `advances` is present, value = (initial ?? 8) + advances.
-   * `value` is ALWAYS set after normalisation.
+   * Normalise one Eigenschaft to the stored parts.
+   *   - naked number n (or {value: n} alone) → { initial: n, advances: 0 }, so the
+   *     derived value becomes n
+   *   - an object with initial / advances / modifier / species is passed through
+   * `value` itself is never written: the data model has no such field.
    */
-  private normalizeEigenschaft(raw: any): { value: number; initial?: number; advances?: number } {
+  private normalizeEigenschaft(raw: any): Record<string, number> | undefined {
     if (typeof raw === 'number') {
-      return { value: raw, initial: raw };
+      return { initial: raw, advances: 0 };
     }
     if (raw && typeof raw === 'object') {
-      const result: any = {};
-      const initial = raw.initial ?? 8;
-      if (raw.value !== undefined) {
-        result.value = raw.value;
-      } else if (raw.advances !== undefined) {
-        result.value = initial + raw.advances;
-      } else {
-        result.value = initial;
+      const result: Record<string, number> = {};
+      for (const part of ['initial', 'advances', 'modifier', 'species'] as const) {
+        if (typeof raw[part] === 'number') result[part] = raw[part];
       }
-      if (raw.initial !== undefined) result.initial = raw.initial;
-      if (raw.advances !== undefined) result.advances = raw.advances;
-      return result;
+      if (typeof raw.value === 'number') {
+        // `value` names the wanted effective value; express it through the stored parts.
+        if (result.initial === undefined) {
+          if (result.advances === undefined) return { ...result, initial: raw.value, advances: 0 };
+        } else if (result.advances === undefined) {
+          result.advances = raw.value - result.initial;
+        }
+      }
+      return Object.keys(result).length > 0 ? result : undefined;
     }
-    // Fallback
-    return { value: 8, initial: 8 };
+    return undefined;
   }
 
   /**
-   * Helper: normalise a resource block (LeP/AsP/KaP/fatePoints).
-   * Accepts {current, max}, {value, max}, or a naked number.
-   * Returns a minimal {value, max} object (or {current, max} for wounds).
+   * Normalise a pool shorthand (LeP / AsP / KaP): a number, or {current|value, max}.
+   * Current points go to `value`. The maximum is derived by the system, so `max` can
+   * only be expressed through `initial`:
+   *   - creatures: max = initial (+ advances + modifier)
+   *   - character / npc LeP: max = initial + 2×KO (+ …), solvable when KO is known
    */
-  private normalizeResource(
+  private normalizePool(
     raw: any,
-    opts?: { useCurrent?: boolean }
+    options: { isCreature: boolean; isNew: boolean; perKo?: number | undefined }
   ): Record<string, number> | undefined {
     if (raw === undefined || raw === null) return undefined;
-    if (typeof raw === 'number') {
-      return { value: raw, max: raw };
+    const source = typeof raw === 'number' ? { current: raw, max: raw } : raw;
+    if (typeof source !== 'object') return undefined;
+
+    const result: Record<string, number> = {};
+    const current = source.current ?? source.value;
+    const max = source.max;
+
+    if (typeof max === 'number') {
+      if (options.isCreature) result.initial = max;
+      else if (options.perKo !== undefined) result.initial = max - options.perKo;
     }
-    if (typeof raw === 'object') {
-      const result: any = {};
-      const current = raw.current ?? raw.value;
-      if (current !== undefined) {
-        result[opts?.useCurrent ? 'current' : 'value'] = current;
-      }
-      if (raw.max !== undefined) result.max = raw.max;
-      if (raw.initial !== undefined) result.initial = raw.initial;
-      return result;
+    if (typeof current === 'number') result.value = current;
+    else if (typeof max === 'number' && options.isNew) result.value = max; // start at full points
+
+    for (const part of ['initial', 'advances', 'modifier'] as const) {
+      if (typeof source[part] === 'number') result[part] = source[part];
     }
-    return undefined;
+    return Object.keys(result).length > 0 ? result : undefined;
   }
 
   /**
@@ -531,72 +645,81 @@ export class DSA5Adapter implements SystemAdapter {
     }
   }
 
-  normalizePayload(system: Record<string, any>): Record<string, any> {
-    // Work on the caller's object but only add/overwrite normalised paths.
-    // We collect changes in a separate object and merge at the end to avoid
+  normalizePayload(
+    system: Record<string, any>,
+    context?: { actorType?: string | undefined; isNew?: boolean | undefined }
+  ): Record<string, any> {
+    // Collect changes in a separate object and merge at the end to avoid
     // intermediate corruption.
     const out: Record<string, any> = {};
+    const status: Record<string, any> = {};
+    const isCreature = context?.actorType === 'creature';
 
     // ── 1. Eigenschaften (characteristics) ──────────────────────────────
-    // Accept MU/KL/... (uppercase) or mu/kl/... (lowercase) keys, each as
-    // a naked number or {value, initial?, advances?}.
+    // Accept MU/KL/... (uppercase) or mu/kl/... (lowercase) keys.
     const charSource = system.characteristics ?? system.eigenschaften;
     if (charSource && typeof charSource === 'object') {
       const normalized: Record<string, any> = {};
       for (const [key, raw] of Object.entries(charSource)) {
         const lower = key.toLowerCase();
-        if (DSA5Adapter.EIGENSCHAFT_KEYS.includes(lower as any)) {
-          normalized[lower] = this.normalizeEigenschaft(raw);
-        }
+        if (!DSA5Adapter.EIGENSCHAFT_KEYS.includes(lower as any)) continue;
+        const eigenschaft = this.normalizeEigenschaft(raw);
+        if (eigenschaft) normalized[lower] = eigenschaft;
       }
+      // Replace the caller's block: uppercase keys and `value` are not part of the model.
+      system.characteristics = {};
+      delete system.eigenschaften;
       if (Object.keys(normalized).length > 0) {
         out.characteristics = normalized;
       }
     }
 
-    // ── 2. LeP (wounds / lifePoints) ────────────────────────────────────
-    // If system.status.wounds already exists, leave it untouched.
-    // Otherwise map from system.lifePoints or system.status.lifePoints.
-    const existingWounds = system.status?.wounds;
-    if (!existingWounds) {
-      const lp = system.lifePoints ?? system.status?.lifePoints;
-      const lpNormalized = this.normalizeResource(lp, { useCurrent: true });
-      if (lpNormalized) {
-        // Fallback: if max missing, derive from KO
-        if (lpNormalized.max === undefined) {
-          const koVal =
-            out.characteristics?.ko?.value ??
-            system.characteristics?.ko?.value ??
-            system.characteristics?.KO?.value ??
-            8;
-          const initial = (lpNormalized as any).initial ?? 8;
-          lpNormalized.max = initial + koVal * 2;
-        }
-        out.status = out.status ?? {};
-        out.status.wounds = lpNormalized;
+    // ── 2. LeP / AsP / KaP (the current points live in `<pool>.value`) ──
+    // Hero LeP = wounds.initial + 2×KO, so a wanted maximum needs KO: from the payload,
+    // or the model's default of 8 on a new actor.
+    const ko = out.characteristics?.ko;
+    const koValue =
+      typeof ko?.initial === 'number'
+        ? ko.initial + (ko.advances ?? 0)
+        : context?.isNew
+          ? 8
+          : undefined;
+
+    for (const [target, shorthand, perKo] of [
+      ['wounds', 'lifePoints', koValue === undefined ? undefined : koValue * 2],
+      ['astralenergy', 'astralEnergy', undefined],
+      ['karmaenergy', 'karmaEnergy', undefined],
+    ] as const) {
+      const explicit = system.status?.[target];
+      // A block under the real key that names `current` or `max` is a shorthand as well:
+      // both are derived by the system and writing them has no effect.
+      const explicitShorthand =
+        explicit && typeof explicit === 'object' && ('current' in explicit || 'max' in explicit)
+          ? { ...explicit }
+          : undefined;
+      // Real fields the caller set explicitly win over the top-level shorthand.
+      if (explicit && !explicitShorthand) continue;
+
+      const raw = explicitShorthand ?? system[shorthand] ?? system.status?.[shorthand];
+      const pool = this.normalizePool(raw, { isCreature, isNew: !!context?.isNew, perKo });
+      if (explicitShorthand) {
+        delete explicit.current;
+        delete explicit.max;
       }
+      if (pool) status[target] = pool;
     }
 
-    // ── 3. AsP / KaP / fatePoints ───────────────────────────────────────
-    const asp = system.astralEnergy ?? system.status?.astralEnergy ?? system.status?.astralenergy;
-    const aspNorm = this.normalizeResource(asp);
-    if (aspNorm) {
-      out.status = out.status ?? {};
-      out.status.astralenergy = aspNorm;
-    }
-
-    const kap = system.karmaEnergy ?? system.status?.karmaEnergy ?? system.status?.karmaenergy;
-    const kapNorm = this.normalizeResource(kap);
-    if (kapNorm) {
-      out.status = out.status ?? {};
-      out.status.karmaenergy = kapNorm;
-    }
-
+    // ── 3. Schicksalspunkte ─────────────────────────────────────────────
     const fate = system.fatePoints ?? system.status?.fatePoints;
-    const fateNorm = this.normalizeResource(fate);
-    if (fateNorm) {
-      out.status = out.status ?? {};
-      out.status.fatePoints = fateNorm;
+    if (typeof fate === 'number') {
+      status.fatePoints = { value: fate };
+    } else if (fate && typeof fate === 'object' && system.fatePoints) {
+      // Shorthand {current, max}: `value` is what is left, `current` the base maximum.
+      const fatePoints: Record<string, number> = {};
+      const left = fate.current ?? fate.value;
+      if (typeof left === 'number') fatePoints.value = left;
+      if (typeof fate.max === 'number') fatePoints.current = fate.max;
+      if (Object.keys(fatePoints).length > 0) status.fatePoints = fatePoints;
     }
 
     // ── 4. Details (species / culture / career / socialstate / experience) ─
@@ -604,10 +727,14 @@ export class DSA5Adapter implements SystemAdapter {
 
     // Direct system.details.* (may already be correct or use string shorthand)
     const srcDetails = system.details;
-    const species = this.normalizeDetail(srcDetails?.species ?? system.species);
+    const species = this.normalizeDetail(
+      srcDetails?.species ?? system.species ?? system.identity?.species
+    );
     if (species) details.species = species;
 
-    const culture = this.normalizeDetail(srcDetails?.culture ?? system.culture);
+    const culture = this.normalizeDetail(
+      srcDetails?.culture ?? system.culture ?? system.identity?.culture
+    );
     if (culture) details.culture = culture;
 
     // career — accept career, profession, or identity.profession
@@ -620,27 +747,27 @@ export class DSA5Adapter implements SystemAdapter {
     );
     if (career) details.career = career;
 
-    const social = this.normalizeDetail(srcDetails?.socialstate ?? system.socialstate);
-    if (social) details.socialstate = social;
-
-    // Experience (AP)
-    const exp = srcDetails?.experience ?? system.experience;
-    if (exp && typeof exp === 'object') {
-      details.experience = {
-        ...(exp.total !== undefined ? { total: exp.total } : {}),
-        ...(exp.spent !== undefined ? { spent: exp.spent } : {}),
-        ...(exp.available !== undefined ? { available: exp.available } : {}),
+    // Social status is a number 0-5; a name is left for the system's own migration.
+    const social = srcDetails?.socialstate ?? system.socialstate;
+    const socialValue = social && typeof social === 'object' ? social.value : social;
+    if (socialValue !== undefined && socialValue !== null) {
+      const numeric = Number(socialValue);
+      details.socialstate = {
+        value: socialValue !== '' && Number.isFinite(numeric) ? numeric : socialValue,
       };
     }
 
-    // identity.* → details.*  (profession→career already handled above)
-    if (system.identity?.species && !details.species) {
-      const idSpecies = this.normalizeDetail(system.identity.species);
-      if (idSpecies) details.species = idSpecies;
-    }
-    if (system.identity?.culture && !details.culture) {
-      const idCulture = this.normalizeDetail(system.identity.culture);
-      if (idCulture) details.culture = idCulture;
+    // Experience (AP): available = total − spent is derived
+    const exp = srcDetails?.experience ?? system.experience;
+    if (exp && typeof exp === 'object') {
+      const experience: Record<string, number> = {};
+      if (exp.total !== undefined) experience.total = exp.total;
+      if (exp.spent !== undefined) experience.spent = exp.spent;
+      else if (exp.total !== undefined && exp.available !== undefined) {
+        experience.spent = exp.total - exp.available;
+      }
+      if (srcDetails?.experience) delete srcDetails.experience.available;
+      if (Object.keys(experience).length > 0) details.experience = experience;
     }
 
     if (Object.keys(details).length > 0) {
@@ -648,36 +775,45 @@ export class DSA5Adapter implements SystemAdapter {
     }
 
     // ── 5. Status / Kampf values ────────────────────────────────────────
-    const status: Record<string, any> = {};
-
-    const init = system.initiative ?? system.status?.initiative;
-    if (init !== undefined) {
-      status.initiative = typeof init === 'number' ? { value: init } : init;
-    }
-
+    // Speed: the stored base is `initial`; `value` is derived from it.
     const speed = system.speed ?? system.status?.speed;
-    if (speed !== undefined) {
-      status.speed = typeof speed === 'number' ? { value: speed } : speed;
-    }
+    if (typeof speed === 'number') status.speed = { initial: speed };
 
+    // Initiative: creatures store their base in `current`; heroes derive it from MU and GE,
+    // where the field is unused.
+    const initiative = system.initiative ?? system.status?.initiative;
+    if (typeof initiative === 'number') status.initiative = { current: initiative };
+
+    // Ausweichen is derived from GE for every actor type (GE / 2 + modifier), so a wanted
+    // total can only be reached through the modifier, and only when GE is known.
     const dodge = system.dodge ?? system.status?.dodge;
-    if (dodge !== undefined) {
-      status.dodge = typeof dodge === 'number' ? { value: dodge } : dodge;
+    if (typeof dodge === 'number') {
+      const ge = out.characteristics?.ge;
+      const geValue =
+        typeof ge?.initial === 'number'
+          ? ge.initial + (ge.advances ?? 0)
+          : context?.isNew
+            ? 8 // the model's default for an Eigenschaft the payload doesn't set
+            : undefined;
+      if (geValue !== undefined) status.dodge = { modifier: dodge - Math.round(geValue / 2) };
     }
 
-    const armour = system.armour ?? system.armor ?? system.status?.armour ?? system.status?.armor;
-    if (armour !== undefined) {
-      status.armour = typeof armour === 'number' ? { value: armour } : armour;
+    // Seelenkraft / Zähigkeit: plain values on creatures; derived for heroes, where a
+    // written `value` is recomputed by the system.
+    for (const key of ['soulpower', 'toughness'] as const) {
+      const raw = system[key] ?? system.status?.[key];
+      if (typeof raw === 'number') status[key] = { value: raw };
     }
 
     const size = system.size ?? system.status?.size;
-    if (size !== undefined) {
-      status.size = typeof size === 'string' ? { value: size } : size;
+    const sizeValue = size && typeof size === 'object' ? size.value : size;
+    if (typeof sizeValue === 'string') {
+      const category = SIZE_CATEGORY_ALIASES[sizeValue.trim().toLowerCase()];
+      status.size = { value: category ?? sizeValue };
     }
 
     if (Object.keys(status).length > 0) {
-      out.status = out.status ?? {};
-      DSA5Adapter.mergeInto(out.status, status);
+      out.status = status;
     }
 
     // ── 6. Tradition ────────────────────────────────────────────────────
@@ -685,8 +821,44 @@ export class DSA5Adapter implements SystemAdapter {
       out.tradition = system.tradition;
     }
 
+    // Top-level shorthands have been mapped onto their real paths; drop them so the
+    // update doesn't carry keys the data model doesn't know.
+    for (const key of [
+      'lifePoints',
+      'astralEnergy',
+      'karmaEnergy',
+      'fatePoints',
+      'species',
+      'culture',
+      'career',
+      'profession',
+      'identity',
+      'socialstate',
+      'experience',
+      'initiative',
+      'speed',
+      'dodge',
+      'soulpower',
+      'toughness',
+      'size',
+    ]) {
+      delete system[key];
+    }
+    if (system.status) {
+      for (const key of ['lifePoints', 'astralEnergy', 'karmaEnergy']) delete system.status[key];
+      for (const key of ['initiative', 'speed', 'dodge', 'soulpower', 'toughness']) {
+        if (typeof system.status[key] === 'number') delete system.status[key];
+      }
+      if (typeof system.status.size === 'string') delete system.status.size;
+    }
+    if (system.details) {
+      delete system.details.profession;
+      for (const key of ['species', 'culture', 'career']) {
+        if (typeof system.details[key] === 'string') delete system.details[key];
+      }
+    }
+
     // ── Merge normalised paths back into the original system object ──────
-    // This preserves unknown keys and only overwrites/adds the normalised ones.
     DSA5Adapter.mergeInto(system, out);
 
     return system;
