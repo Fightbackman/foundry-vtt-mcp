@@ -1,5 +1,6 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
 import { permissionManager } from './permissions.js';
+import { DSA5JournalAccess } from './dsa5-journals.js';
 import { transactionManager } from './transaction-manager.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
@@ -4369,7 +4370,17 @@ export class FoundryDataAccess {
     // Get first text page content
     const firstPage = journal.pages.find((page: any) => page.type === 'text');
     if (!firstPage) {
-      return { content: '', allPages, pageCount };
+      // DSA5 structured pages (Dramatis Personae, quest log, …) have no text content;
+      // point the caller at the tool that reads them.
+      const structured = (
+        journal.pages?.map((page: any) => DSA5JournalAccess.describeStructuredPage(page)) ?? []
+      ).filter(Boolean);
+      return {
+        content: '',
+        allPages,
+        pageCount,
+        ...(structured.length ? { note: structured.join(' ') } : {}),
+      };
     }
 
     return {
@@ -4407,7 +4418,10 @@ export class FoundryDataAccess {
       id: page.id || '',
       name: page.name || '',
       type: page.type || 'text',
-      content: page.type === 'text' ? page.text?.content || '' : page.src || '',
+      content:
+        page.type === 'text'
+          ? page.text?.content || ''
+          : (DSA5JournalAccess.describeStructuredPage(page) ?? (page.src || '')),
     };
   }
 

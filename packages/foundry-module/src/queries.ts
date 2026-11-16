@@ -2,14 +2,17 @@ import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 import { ComfyUIManager } from './comfyui-manager.js';
 import { guardQueryHandler } from './query-guard.js';
+import { DSA5JournalAccess } from './dsa5-journals.js';
 
 export class QueryHandlers {
   public dataAccess: FoundryDataAccess;
   private comfyuiManager: ComfyUIManager;
+  private dsa5Journals: DSA5JournalAccess;
 
   constructor() {
     this.dataAccess = new FoundryDataAccess();
     this.comfyuiManager = new ComfyUIManager();
+    this.dsa5Journals = new DSA5JournalAccess();
   }
 
   /**
@@ -101,6 +104,10 @@ export class QueryHandlers {
     // WFRP4e actor stat-block update
     CONFIG.queries[`${modulePrefix}.updateWfrp4eActor`] = this.handleUpdateWfrp4eActor.bind(this);
     CONFIG.queries[`${modulePrefix}.addWfrp4eItems`] = this.handleAddWfrp4eItems.bind(this);
+
+    // DSA5 structured journal pages (Dramatis Personae, quest log, almanac, city details)
+    CONFIG.queries[`${modulePrefix}.dsa5ReadJournals`] = this.handleDsa5ReadJournals.bind(this);
+    CONFIG.queries[`${modulePrefix}.dsa5ManageJournal`] = this.handleDsa5ManageJournal.bind(this);
 
     // Token manipulation queries
     CONFIG.queries[`${modulePrefix}.moveToken`] = this.handleMoveToken.bind(this);
@@ -916,6 +923,35 @@ export class QueryHandlers {
         `Failed to update WFRP4e actor: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
+  }
+
+  /**
+   * Read DSA5 structured journal pages. GM-only.
+   */
+  async handleDsa5ReadJournals(data: any): Promise<any> {
+    const gmCheck = this.validateGMAccess();
+    if (!gmCheck.allowed) {
+      return { error: 'Access denied', success: false };
+    }
+
+    this.dataAccess.validateFoundryState();
+    return await this.dsa5Journals.read(data ?? {});
+  }
+
+  /**
+   * Create, update or delete an entry on a DSA5 structured journal page. GM-only.
+   */
+  async handleDsa5ManageJournal(data: any): Promise<any> {
+    const gmCheck = this.validateGMAccess();
+    if (!gmCheck.allowed) {
+      return { error: 'Access denied', success: false };
+    }
+
+    this.dataAccess.validateFoundryState();
+    if (!data?.pageType || !data?.action) {
+      return { success: false, error: 'pageType and action are required' };
+    }
+    return await this.dsa5Journals.manage(data);
   }
 
   /**

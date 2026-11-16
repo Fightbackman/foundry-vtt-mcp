@@ -36,6 +36,7 @@ import { CampaignManagementTools } from './tools/campaign-management.js';
 import { OwnershipTools } from './tools/ownership.js';
 import { WFRP4eUpdateActorTools } from './tools/wfrp4e/update-actor.js';
 import { WFRP4eAddItemsTools } from './tools/wfrp4e/add-items.js';
+import { DSA5JournalTools } from './tools/dsa5/journals.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
@@ -1225,6 +1226,7 @@ async function startBackend(): Promise<void> {
 
   const wfrp4eUpdateActorTools = new WFRP4eUpdateActorTools({ foundryClient, logger });
   const wfrp4eAddItemsTools = new WFRP4eAddItemsTools({ foundryClient, logger });
+  const dsa5JournalTools = new DSA5JournalTools({ foundryClient, logger });
 
   // Initialize mapgen-style backend components for map generation
   let mapGenerationJobQueue: any = null;
@@ -1454,6 +1456,8 @@ async function startBackend(): Promise<void> {
 
     ...wfrp4eAddItemsTools.getToolDefinitions(),
 
+    ...dsa5JournalTools.getToolDefinitions(),
+
     ...tokenManipulationTools.getToolDefinitions(),
 
     ...mapGenerationTools.getToolDefinitions(),
@@ -1609,6 +1613,18 @@ async function startBackend(): Promise<void> {
 
                 case 'wfrp4e-add-items':
                   result = await wfrp4eAddItemsTools.handleAddItems(args);
+
+                  break;
+
+                // DSA5 structured journal pages
+
+                case 'dsa5-journal-read':
+                  result = await dsa5JournalTools.handleRead(args);
+
+                  break;
+
+                case 'dsa5-journal-manage':
+                  result = await dsa5JournalTools.handleManage(args);
 
                   break;
 
