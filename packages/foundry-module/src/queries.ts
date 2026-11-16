@@ -76,6 +76,7 @@ export class QueryHandlers {
     // Phase 4: Dice roll queries
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] =
       this.handleRequestPlayerRolls.bind(this);
+    CONFIG.queries[`${modulePrefix}.dsa5RollCheck`] = this.handleDsa5RollCheck.bind(this);
 
     // Enhanced creature index for campaign analysis
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] =
@@ -808,6 +809,31 @@ export class QueryHandlers {
     } catch (error) {
       throw new Error(
         `Failed to request player rolls: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Roll a DSA5 check for an actor without a dialog (dsa5-roll-check). GM-only.
+   */
+  async handleDsa5RollCheck(data: any): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      this.dataAccess.validateFoundryState();
+
+      if (!data?.actorIdentifier || !data?.check) {
+        throw new Error('actorIdentifier and check are required');
+      }
+
+      return await this.dataAccess.rollDsa5Check(data);
+    } catch (error) {
+      throw new Error(
+        `Failed to roll DSA5 check: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }

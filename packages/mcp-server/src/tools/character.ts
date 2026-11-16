@@ -111,7 +111,7 @@ export class CharacterTools {
       {
         name: 'use-item',
         description:
-          'Use an item on a character (cast spell, use ability, activate feature, consume item). Opens the item dialog in Foundry VTT for the GM to configure options and confirm. Optionally specify targets by name. Returns immediately with status "initiated" - tell the user to check Foundry for any dialogs. Works across systems: D&D 5e, PF2e, DSA5. Use get-character or search-character-items first to see available items/spells.',
+          'Use an item on a character (cast spell, use ability, activate feature, consume item). Opens the item dialog in Foundry VTT for the GM to configure options and confirm. Optionally specify targets by name. Returns immediately with status "initiated" - tell the user to check Foundry for any dialogs. Works across systems: D&D 5e, PF2e, DSA5. In DSA5 worlds the item runs through the system\'s own test without a dialog and the result is returned (status "completed" with a "roll" summary): weapons and attack traits roll an attack (with damage on a hit), spells/liturgies/rituals/ceremonies their casting test, skills a skill check; consumables are consumed; other items are posted to chat. Use get-character or search-character-items first to see available items/spells.',
         inputSchema: {
           type: 'object',
           properties: {
