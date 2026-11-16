@@ -1,3 +1,9 @@
+## Unreleased
+
+### New Features
+
+- **DSA5 condition levels in `toggle-token-condition`** — a new `level` parameter sets a leveled DSA5 condition such as Pain, Fear or Stupor to a total level, and `0` removes it. Levels the system applies on its own (pain from wounds, encumbrance from armour) are kept and counted, with a warning when the requested level is below them or above the maximum. `active: true` leaves an existing condition as it is instead of adding a duplicate effect, conditions can be named by their localized name (e.g. "Schmerz"), and adding and removing go through the system's own condition API so its follow-up effects apply. The result reports the level, maximum, automatic and manual levels; `get-available-conditions` returns localized names and descriptions plus `maxLevel`, and `get-character` shows each condition's level. DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
