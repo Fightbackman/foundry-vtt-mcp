@@ -1665,7 +1665,8 @@ export class QueryHandlers {
   private async handleToggleTokenCondition(data: {
     tokenId: string;
     conditionId: string;
-    active: boolean;
+    active?: boolean;
+    level?: number;
   }): Promise<any> {
     try {
       // SECURITY: Silent GM validation
@@ -1682,7 +1683,11 @@ export class QueryHandlers {
       if (!data.conditionId) {
         throw new Error('conditionId is required');
       }
-      if (typeof data.active !== 'boolean') {
+      // A level (DSA5) says on its own whether the condition should be there.
+      if (data.level !== undefined && typeof data.level !== 'number') {
+        throw new Error('level must be a number');
+      }
+      if (typeof data.active !== 'boolean' && data.level === undefined) {
         throw new Error('active must be a boolean');
       }
 

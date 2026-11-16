@@ -236,6 +236,17 @@ and rebuilt when a pack changes, like the index of the other systems.
 The `DSA5IndexBuilder` and `filters.ts` in this folder predate that integration and are not
 used at runtime.
 
+## Conditions
+
+`toggle-token-condition` and `get-available-conditions` use DSA5's own condition API (`actor.addCondition` / `actor.removeCondition`, implemented in `packages/foundry-module/src/dsa5-conditions.ts`), not `toggleStatusEffect`, which in DSA5 adds one level per call.
+
+- Many conditions have levels (usually 1–4; `get-available-conditions` reports `maxLevel`). Each level is the sum of an **automatic** share, which the system sets itself (pain from lost LeP, encumbrance from armour, stupor from brawling), and a **manual** share.
+- `level: N` sets the total to N by changing only the manual share. It is capped at the maximum, and cannot go below the automatic share; both cases return a warning.
+- `active: true` adds level 1 if the condition is missing and otherwise leaves it as it is. `active: false` or `level: 0` removes it, except for automatic levels: the system recalculates those after every effect change and would re-apply them at once, so they stay and a warning says so.
+- Conditions can be named by id or by localized name, case-insensitively (`inpain`, or `Schmerz` / `Pain` depending on the world's language).
+- The system only applies conditions to an unlinked token while that token is drawn on the canvas; otherwise the tool returns an error instead of silently doing nothing.
+- `get-character` lists each effect's `statuses` and, for leveled conditions, `level` and `maxLevel`.
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:

@@ -182,3 +182,31 @@ describe('CharacterTools.handleGetCharacter representation metadata', () => {
     });
   });
 });
+
+describe('CharacterTools.handleGetCharacter effects', () => {
+  it('passes DSA5 condition statuses and levels through and adds nothing for others', async () => {
+    const queryResult = {
+      id: 'YZk06eI9NHTN9PuN',
+      name: 'MCP Test Actor',
+      type: 'character',
+      system: {},
+      items: [],
+      effects: [
+        { id: 'e1', name: 'Schmerz', disabled: false, statuses: ['inpain'], level: 2, maxLevel: 4 },
+        { id: 'e2', name: 'Bless', disabled: false },
+      ],
+    };
+    const { tools } = makeCharacterTools(queryResult);
+
+    const result = await tools.handleGetCharacter({ identifier: 'MCP Test Actor' });
+
+    expect(result.effects[0]).toMatchObject({ statuses: ['inpain'], level: 2, maxLevel: 4 });
+    expect(result.effects[1]).toEqual({
+      id: 'e2',
+      name: 'Bless',
+      disabled: false,
+      duration: null,
+      hasIcon: false,
+    });
+  });
+});
