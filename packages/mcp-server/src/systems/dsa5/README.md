@@ -157,6 +157,33 @@ const builder = new DSA5IndexBuilder();
 const index = await builder.buildIndex(packs, force);
 ```
 
+## Creature Discovery (`list-creatures-by-criteria`)
+
+In a DSA5 world the Foundry module indexes every Actor compendium
+(`packages/foundry-module/src/dsa5-creature-index.ts`, driven by the enhanced creature index
+in `data-access.ts`) and `list-creatures-by-criteria` filters that index. Actors of type
+`creature`, `npc` and `character` are indexed from the prepared documents, so derived values
+such as the maximum LeP, Ausweichen and Rüstungsschutz are the ones the sheet shows.
+
+DSA5 has no challenge rating or level for creatures; these criteria apply instead:
+
+| Criterion       | Matches                                                                                         |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| `creatureClass` | Part of the creature class on the sheet, case-insensitive (`"Tier"`, `"Dämon"`, `"Untot"`, …)   |
+| `species`       | Part of the species of an NPC or character (`"Elf"`, `"Zwerg"`, …)                              |
+| `actorType`     | `creature`, `npc` or `character`                                                                |
+| `size`          | `tiny`, `small`, `average`, `big`, `giant` (`medium` / `large` / `huge` are mapped onto them)   |
+| `hitPoints`     | Maximum Lebensenergie, exact or `{min, max}`                                                    |
+| `hasSpells`     | Has AsP or KaP, or owns spells, rituals, liturgies or ceremonies                                |
+| `creatureType`  | The tool's generic type filter: part of the creature class, or of the species for NPCs / heroes |
+
+Results are sorted by LeP and carry class or species / profession, size, LeP, AsP / KaP, SK, ZK,
+Ausweichen, RS, GS, INI and the names of a creature's traits. The index is persisted per world
+and rebuilt when a pack changes, like the index of the other systems.
+
+The `DSA5IndexBuilder` and `filters.ts` in this folder predate that integration and are not
+used at runtime.
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:
@@ -194,7 +221,7 @@ The DSA5 adapter provides German UI text by default:
 
 1. **Wounds Field Change:** In v0.6.1, `system.status.wounds.value` is used directly (not inverted). Previous versions used inversion logic.
 2. **Career vs Profession:** DSA5 uses `system.details.career.value`, not `profession`
-3. **Browser Context:** IndexBuilder requires Foundry module integration (planned for v0.6.2+)
+3. **Creature index:** DSA5 has no level or challenge rating for creatures; filter by creature class, size and Lebensenergie instead (see Creature Discovery above)
 
 ## Contributing
 

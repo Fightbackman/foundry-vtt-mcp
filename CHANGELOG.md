@@ -1,3 +1,9 @@
+## Unreleased
+
+### New Features
+
+- **`list-creatures-by-criteria` in DSA5 worlds** — the enhanced creature index is now built for DSA5, so the tool searches the world's Actor compendiums by real data instead of returning nothing. DSA5 has no challenge rating or creature level; the new `creatureClass` ("Tier", "Dämon", …), `species` and `actorType` criteria apply instead, together with `size` (the system's `tiny` / `small` / `average` / `big` / `giant`, with `medium` / `large` / `huge` mapped onto them), `hitPoints` as the maximum Lebensenergie, and `hasSpells`. Each result lists class or species and profession, size, LeP, AsP / KaP, Seelenkraft, Zähigkeit, Ausweichen, armor, speed, initiative and the creature's traits. DSA5 worlds only; other systems are unaffected.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
