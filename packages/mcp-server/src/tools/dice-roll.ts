@@ -21,7 +21,7 @@ export class DiceRollTools {
       {
         name: 'request-player-rolls',
         description:
-          'Request dice rolls from players with interactive buttons. Creates roll buttons in Foundry chat that players can click. VISIBILITY WORKFLOW: Before calling this function, ensure the user has specified whether they want a public or private roll. If they have already specified "public" or "private" in their request (e.g., "public performance check", "private stealth roll"), you can proceed directly. If the visibility is ambiguous or unspecified, ask: "Do you want this to be a PUBLIC roll (visible to all players) or PRIVATE roll (visible to player and GM only)?" and wait for their answer. Supports character-to-player resolution and GM fallback.',
+          'Request dice rolls from players with interactive buttons. Creates roll buttons in Foundry chat that players can click. VISIBILITY WORKFLOW: Before calling this function, ensure the user has specified whether they want a public or private roll. If they have already specified "public" or "private" in their request (e.g., "public performance check", "private stealth roll"), you can proceed directly. If the visibility is ambiguous or unspecified, ask: "Do you want this to be a PUBLIC roll (visible to all players) or PRIVATE roll (visible to player and GM only)?" and wait for their answer. Supports character-to-player resolution and GM fallback. DSA5 worlds: posts the system\'s own roll request card instead of a d20 button; rollType "skill" requests a skill check (Talentprobe, rollTarget = skill name), "ability" an attribute check (Eigenschaftsprobe, rollTarget = MU/KL/IN/CH/FF/GE/KO/KK), rollModifier must be a whole number (positive = easier, negative = harder); other roll types are refused.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -34,7 +34,7 @@ export class DiceRollTools {
             rollTarget: {
               type: 'string',
               description:
-                'Target for the roll - can be ability name (str, dex, con, int, wis, cha), skill name (perception, insight, stealth, etc.), or custom roll formula',
+                'Target for the roll - can be ability name (str, dex, con, int, wis, cha), skill name (perception, insight, stealth, etc.), or custom roll formula. DSA5: skill name or attribute (MU, KL, IN, CH, FF, GE, KO, KK)',
             },
             targetPlayer: {
               type: 'string',

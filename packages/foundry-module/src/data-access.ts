@@ -14,6 +14,13 @@ import {
   findDsa5Condition,
   setDsa5Condition,
 } from './dsa5-conditions.js';
+import {
+  requestDsa5PlayerRoll,
+  rollDsa5Check,
+  useDsa5Item,
+  type Dsa5CheckType,
+  type Dsa5MessageMode,
+} from './dsa5-rolls.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -6117,6 +6124,19 @@ export class FoundryDataAccess {
   }): Promise<{ success: boolean; message: string; error?: string }> {
     this.validateFoundryState();
 
+    // DSA5 has no d20 + modifier checks; it posts its own roll request card instead.
+    if ((game.system as any).id === 'dsa5') {
+      try {
+        return await requestDsa5PlayerRoll(data);
+      } catch (error) {
+        return {
+          success: false,
+          message: '',
+          error: error instanceof Error ? error.message : 'Unknown error creating roll request',
+        };
+      }
+    }
+
     try {
       // Resolve target player from character name or player name with enhanced error handling
       const playerInfo = this.resolveTargetPlayer(data.targetPlayer);
@@ -9199,6 +9219,115 @@ export class FoundryDataAccess {
   }
 
   /**
+   * DSA5 branch of useItem: run the item through the system's own test (see dsa5-rolls.ts)
+   * and report the structured result together with the targeting outcome.
+   */
+  private async useDsa5ItemWithTargets(
+    actor: any,
+    item: any,
+    options: { skipDialog?: boolean | undefined },
+    targeting: ItemTargetingResult,
+    warnings: string[]
+  ): Promise<any> {
+    const resolvedTargetNames = targeting.applied.map(target => target.tokenName);
+    try {
+      const outcome = await useDsa5Item(actor, item, { skipDialog: options.skipDialog });
+      this.auditLog(
+        'useItem',
+        {
+          actorId: actor.id,
+          itemId: item.id,
+          itemName: item.name,
+          action: outcome.action,
+          targets: resolvedTargetNames,
+          targetingStatus: targeting.status,
+          targetingWarnings: warnings,
+        },
+        outcome.success ? 'success' : 'failure',
+        outcome.success ? undefined : outcome.message
+      );
+      const targetingWarningInfo =
+        warnings.length > 0 ? ` Targeting warning: ${warnings.join(' ')}` : '';
+      return {
+        ...outcome,
+        message: `${outcome.message}${targetingWarningInfo}`,
+        itemName: item.name,
+        actorName: actor.name,
+        targeting,
+        ...(resolvedTargetNames.length > 0 ? { targets: resolvedTargetNames } : {}),
+        ...(warnings.length > 0 ? { warnings } : {}),
+      };
+    } catch (error) {
+      this.auditLog(
+        'useItem',
+        { actorId: actor.id, itemId: item.id },
+        'failure',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+      throw new Error(
+        `Failed to use item "${item.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Roll a DSA5 check (skill, attribute, attack, parry, dodge, spell) for an actor without
+   * a dialog. Backs the dsa5-roll-check tool; the rules live in dsa5-rolls.ts.
+   */
+  async rollDsa5Check(data: {
+    actorIdentifier: string;
+    check: Dsa5CheckType;
+    name?: string;
+    modifier?: number;
+    targets?: string[];
+    messageMode?: Dsa5MessageMode;
+  }): Promise<any> {
+    this.validateFoundryState();
+
+    const systemId = (game.system as any).id;
+    if (systemId !== 'dsa5') {
+      return {
+        success: false,
+        error: `dsa5-roll-check requires the DSA5 system (current: "${systemId}")`,
+      };
+    }
+
+    const permissionCheck = permissionManager.checkWritePermission('createChatMessage');
+    if (!permissionCheck.allowed) {
+      return {
+        success: false,
+        error: `${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`,
+      };
+    }
+    permissionManager.auditPermissionCheck('createChatMessage', permissionCheck, data);
+
+    const actor = this.findActorByIdentifier(data.actorIdentifier);
+    if (!actor) {
+      return { success: false, error: `Actor not found: ${data.actorIdentifier}` };
+    }
+
+    // Targeted tokens turn the roll into an opposed test, as on the sheet.
+    const { targeting, warnings } = await this.applyItemTargets(actor, data.targets);
+    const result = await rollDsa5Check(actor, {
+      check: data.check,
+      name: data.name,
+      modifier: data.modifier,
+      messageMode: data.messageMode,
+    });
+    this.auditLog(
+      'rollDsa5Check',
+      { actorId: actor.id, check: data.check, name: data.name, targeting: targeting.status },
+      result.success ? 'success' : 'failure',
+      result.error
+    );
+    return {
+      ...result,
+      ...(data.targets?.length ? { targeting } : {}),
+      ...(warnings.length > 0 ? { warnings } : {}),
+    };
+  }
+
+  /**
    * Use an item on a character (cast spell, use ability, consume item, etc.)
    * This triggers the item's default use behavior in Foundry VTT
    */
@@ -9251,6 +9380,11 @@ export class FoundryDataAccess {
     const { targeting, warnings } = await this.applyItemTargets(actor, targets);
     const resolvedTargetNames = targeting.applied.map(target => target.tokenName);
 
+    // DSA5 items have no use()/toChat()/roll(); they run through the system's own tests.
+    if (systemId === 'dsa5') {
+      return this.useDsa5ItemWithTargets(actor, item, options, targeting, warnings);
+    }
+
     try {
       // For items that may show dialogs (spells with choices, etc.),
       // we fire-and-forget to avoid timeout issues. The GM will interact
@@ -9299,38 +9433,6 @@ export class FoundryDataAccess {
         itemAny.roll().catch((err: Error) => {
           console.error(`[foundry-mcp-bridge] Error using item ${item.name}:`, err);
         });
-      } else if (systemId === 'dsa5') {
-        // DSA5 specific handling
-        if (
-          item.type === 'spell' ||
-          item.type === 'liturgy' ||
-          item.type === 'ceremony' ||
-          item.type === 'ritual'
-        ) {
-          if (typeof itemAny.postItem === 'function') {
-            itemAny.postItem().catch((err: Error) => {
-              console.error(`[foundry-mcp-bridge] Error using item ${item.name}:`, err);
-            });
-          } else if (typeof itemAny.setupEffect === 'function') {
-            itemAny.setupEffect().catch((err: Error) => {
-              console.error(`[foundry-mcp-bridge] Error using item ${item.name}:`, err);
-            });
-          } else {
-            // Fallback: create a chat message describing the item
-            const chatData = {
-              user: game.user?.id,
-              speaker: ChatMessage.getSpeaker({ actor }),
-              content: `<h3>${item.name}</h3><p>${actor.name} uses ${item.name}.</p>`,
-            };
-            ChatMessage.create(chatData);
-          }
-        } else {
-          if (typeof itemAny.postItem === 'function') {
-            itemAny.postItem().catch((err: Error) => {
-              console.error(`[foundry-mcp-bridge] Error using item ${item.name}:`, err);
-            });
-          }
-        }
       } else {
         // Generic fallback: create a chat message
         const chatData = {
