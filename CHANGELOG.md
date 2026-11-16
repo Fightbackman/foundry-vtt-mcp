@@ -1,3 +1,9 @@
+## Unreleased
+
+### Fixes
+
+- **DSA5 character data in `get-character` and `manage-actors`** — the DSA5 adapter read and wrote fields that the current system (8.x) derives at runtime or does not have. `get-character` reported the maximum LeP as the current LeP and used wrong AP thresholds for the Erfahrungsgrad (a 1250 AP hero showed as "Durchschnittlich" instead of "Kompetent"); it now reads the current LeP from `wounds.value`, uses the system's thresholds (1000 / 1100 / 1200 / 1400 / 1700 / 2100 AP), and also returns AsP, KaP, Schicksalspunkte, Seelenkraft, Zähigkeit, armor, trained Talente and raised Kampftechniken, plus a filled `basicInfo`. In `manage-actors`, shorthands such as `characteristics: { MU: 14 }`, `lifePoints`, `initiative`, `dodge` and `size` silently had no effect because they were written to derived fields; they are now mapped onto the stored parts the system computes those values from (`initial` / `advances`, `wounds.initial`, the dodge modifier, the system's size categories), and `action: "describe"` documents which values can be set and how. DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
