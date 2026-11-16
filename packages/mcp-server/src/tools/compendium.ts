@@ -194,7 +194,7 @@ export class CompendiumTools {
       {
         name: 'list-creatures-by-criteria',
         description:
-          'MULTI-SYSTEM CREATURE DISCOVERY: Get a comprehensive list of creatures matching specific criteria. Supports D&D 5e (Challenge Rating), Pathfinder 2e (Level), and Cosmere RPG (Tier/Role/Investiture) with automatic system detection. Perfect for encounter building - returns minimal data so Claude can use built-in monster knowledge to identify suitable creatures by name, then pull full details only for final selections. Features intelligent pack prioritization and high result limits for complete surveys.',
+          'MULTI-SYSTEM CREATURE DISCOVERY: Get a comprehensive list of creatures matching specific criteria. Supports D&D 5e (Challenge Rating), Pathfinder 2e (Level), Cosmere RPG (Tier/Role/Investiture) and DSA5 (creature class, species, size, Lebensenergie) with automatic system detection. Perfect for encounter building - returns minimal data so Claude can use built-in monster knowledge to identify suitable creatures by name, then pull full details only for final selections. Features intelligent pack prioritization and high result limits for complete surveys.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -236,8 +236,19 @@ export class CompendiumTools {
             },
             size: {
               type: 'string',
-              description: 'Filter by creature size',
-              enum: ['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan'],
+              description:
+                'Filter by creature size. DSA5 uses tiny, small, average, big, giant (medium/large/huge are mapped onto them).',
+              enum: [
+                'tiny',
+                'small',
+                'medium',
+                'large',
+                'huge',
+                'gargantuan',
+                'average',
+                'big',
+                'giant',
+              ],
             },
             hasSpells: {
               type: 'boolean',
@@ -310,7 +321,24 @@ export class CompendiumTools {
                   description: 'Health/HP range object (e.g., {"min": 30, "max": 80})',
                 },
               ],
-              description: 'Filter by max health/HP (Cosmere RPG; cross-system field)',
+              description:
+                'Filter by max health/HP (Cosmere RPG; in DSA5 the maximum Lebensenergie; cross-system field)',
+            },
+            // DSA5 specific filters
+            creatureClass: {
+              type: 'string',
+              description:
+                'Filter by creature class as written on the sheet, matched as a case-insensitive part of it, e.g. "Tier", "Dämon", "Untot" or the English names in an English world (DSA5)',
+            },
+            species: {
+              type: 'string',
+              description:
+                'Filter NPCs and characters by species, matched as a case-insensitive part of it, e.g. "Elf", "Zwerg" (DSA5)',
+            },
+            actorType: {
+              type: 'string',
+              enum: ['creature', 'npc', 'character'],
+              description: 'Filter by actor type (DSA5)',
             },
             defensesMin: {
               type: 'object',
@@ -587,7 +615,14 @@ export class CompendiumTools {
 
       // Common filters
       creatureType: z.string().optional(), // Accept any string, validate per system
-      size: z.enum(['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan']).optional(),
+      size: z
+        .enum(['tiny', 'small', 'medium', 'large', 'huge', 'gargantuan', 'average', 'big', 'giant'])
+        .optional(),
+
+      // DSA5 specific
+      creatureClass: z.string().optional(),
+      species: z.string().optional(),
+      actorType: z.enum(['creature', 'npc', 'character']).optional(),
 
       // Pathfinder 2e specific
       traits: z.array(z.string()).optional(),
@@ -779,7 +814,7 @@ export class CompendiumTools {
         criteria: params,
         searchSummary: {
           ...searchSummary,
-          searchStrategy: `Prioritized pack search - ${gameSystem === 'pf2e' ? 'PF2e' : gameSystem === 'cosmere-rpg' ? 'Cosmere RPG' : gameSystem === 'mgt2e' ? 'Mongoose Traveller 2e' : 'D&D 5e'} content first, then modules, then campaign-specific`,
+          searchStrategy: `Prioritized pack search - ${gameSystem === 'pf2e' ? 'PF2e' : gameSystem === 'cosmere-rpg' ? 'Cosmere RPG' : gameSystem === 'mgt2e' ? 'Mongoose Traveller 2e' : gameSystem === 'dsa5' ? 'DSA5' : 'D&D 5e'} content first, then modules, then campaign-specific`,
           note: 'Packs searched in priority order to find most relevant creatures first',
         },
         optimizationNote:
@@ -1083,6 +1118,17 @@ export class CompendiumTools {
       pack: { id: creature.pack, label: creature.packLabel },
     };
 
+    if (gameSystem === 'dsa5') {
+      // DSA5 entries come fully shaped from the module's index (dsa5-creature-index.ts).
+      // Entries without a summary come from the name-only fallback search.
+      if (creature.summary) {
+        const { id, name, pack, packLabel, type, ...stats } = creature;
+        delete stats.hasImage;
+        return { name, id, type, pack: { id: pack, label: packLabel }, ...stats };
+      }
+      return { ...formatted, type: creature.type };
+    }
+
     if (gameSystem === 'cosmere-rpg') {
       // Cosmere fields come pre-flattened from data-access.ts; pass them through.
       if (creature.tier !== undefined) formatted.tier = creature.tier;
@@ -1238,6 +1284,20 @@ export class CompendiumTools {
           const min = params.level.min ?? -1;
           const max = params.level.max ?? 25;
           parts.push(`Level ${min}-${max}`);
+        }
+      }
+    } else if (gameSystem === 'dsa5') {
+      if (params.actorType) parts.push(`type=${params.actorType}`);
+      if (params.creatureClass) parts.push(`class contains "${params.creatureClass}"`);
+      if (params.species) parts.push(`species contains "${params.species}"`);
+      if (params.hitPoints !== undefined) {
+        if (typeof params.hitPoints === 'number') {
+          parts.push(`LeP=${params.hitPoints}`);
+        } else {
+          const { min, max } = params.hitPoints;
+          if (min !== undefined && max !== undefined) parts.push(`LeP ${min}-${max}`);
+          else if (min !== undefined) parts.push(`LeP>=${min}`);
+          else if (max !== undefined) parts.push(`LeP<=${max}`);
         }
       }
     } else if (gameSystem === 'cosmere-rpg') {
