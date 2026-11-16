@@ -147,7 +147,7 @@ export class TokenManipulationTools {
       {
         name: 'toggle-token-condition',
         description:
-          'Toggle a status effect/condition on or off for a token. Use this to apply or remove conditions like Prone, Poisoned, Blinded, etc.',
+          'Toggle a status effect/condition on or off for a token. Use this to apply or remove conditions like Prone, Poisoned, Blinded, etc. In DSA5 worlds, conditions can also be set to a level (e.g. Pain/Schmerz 2) with the level parameter; the result then reports the level, the maximum, and how much of it the system applies automatically.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -158,12 +158,18 @@ export class TokenManipulationTools {
             conditionId: {
               type: 'string',
               description:
-                'The ID of the condition/status effect to toggle (e.g., "prone", "poisoned", "blinded")',
+                'The ID of the condition/status effect to toggle (e.g., "prone", "poisoned", "blinded"). In DSA5 worlds the localized name (e.g. "Schmerz") also works, case-insensitively.',
             },
             active: {
               type: 'boolean',
               description:
-                'Optional: true to add the condition, false to remove it. If not specified, will toggle the current state.',
+                'Optional: true to add the condition, false to remove it. If not specified, will toggle the current state. In DSA5 worlds, true leaves an existing condition at its current level.',
+            },
+            level: {
+              type: 'integer',
+              minimum: 0,
+              description:
+                'DSA5 only (rejected in other systems): set a leveled condition to this total level. Levels the system applies automatically (e.g. pain from wounds) count towards it and are kept; a level above the maximum is capped. 0 removes the condition. Use get-available-conditions to see which conditions have levels (maxLevel).',
             },
           },
           required: ['tokenId', 'conditionId'],
@@ -172,7 +178,7 @@ export class TokenManipulationTools {
       {
         name: 'get-available-conditions',
         description:
-          'Get a list of all available status effects/conditions that can be applied to tokens in the current game system',
+          'Get a list of all available status effects/conditions that can be applied to tokens in the current game system. In DSA5 worlds, names and descriptions are localized and leveled conditions include maxLevel.',
         inputSchema: {
           type: 'object',
           properties: {},
@@ -375,17 +381,19 @@ export class TokenManipulationTools {
       tokenId: z.string(),
       conditionId: z.string(),
       active: z.boolean().optional(),
+      level: z.number().int().min(0).optional(),
     });
 
-    const { tokenId, conditionId, active } = schema.parse(args);
+    const { tokenId, conditionId, active, level } = schema.parse(args);
 
-    this.logger.info('Toggling token condition', { tokenId, conditionId, active });
+    this.logger.info('Toggling token condition', { tokenId, conditionId, active, level });
 
     try {
       const result = await this.foundryClient.query('foundry-mcp-bridge.toggle-token-condition', {
         tokenId,
         conditionId,
         active,
+        ...(level !== undefined ? { level } : {}),
       });
 
       this.logger.debug('Token condition toggled successfully', { tokenId, conditionId, result });
@@ -393,9 +401,16 @@ export class TokenManipulationTools {
       return {
         success: true,
         tokenId,
-        conditionId,
+        // DSA5 reports the id it resolved, e.g. when the condition was named in German.
+        conditionId: result.conditionId ?? conditionId,
         isActive: result.isActive,
         conditionName: result.conditionName,
+        // Level details exist only for DSA5's leveled conditions.
+        ...(result.level !== undefined ? { level: result.level } : {}),
+        ...(result.maxLevel !== undefined ? { maxLevel: result.maxLevel } : {}),
+        ...(result.autoLevel !== undefined ? { autoLevel: result.autoLevel } : {}),
+        ...(result.manualLevel !== undefined ? { manualLevel: result.manualLevel } : {}),
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       };
     } catch (error) {
       this.logger.error('Failed to toggle token condition', error);

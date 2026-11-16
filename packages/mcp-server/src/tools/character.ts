@@ -1134,6 +1134,10 @@ export class CharacterTools {
           }
         : null,
       hasIcon: !!effect.icon,
+      // Only DSA5 sends these (condition statuses and levels), so other systems are unchanged.
+      ...(effect.statuses ? { statuses: effect.statuses } : {}),
+      ...(effect.level !== undefined ? { level: effect.level } : {}),
+      ...(effect.maxLevel !== undefined ? { maxLevel: effect.maxLevel } : {}),
     }));
   }
 

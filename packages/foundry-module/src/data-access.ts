@@ -1,6 +1,12 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
 import { permissionManager } from './permissions.js';
 import { transactionManager } from './transaction-manager.js';
+import {
+  describeDsa5Condition,
+  describeDsa5Effect,
+  findDsa5Condition,
+  setDsa5Condition,
+} from './dsa5-conditions.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -1847,6 +1853,8 @@ export class FoundryDataAccess {
       effects: actor.effects.map(effect => {
         const eff = effect;
         const dur = eff.duration;
+        // DSA5 condition levels live on the effect; other systems get no extra fields.
+        const dsa5Extras = (game.system as any)?.id === 'dsa5' ? describeDsa5Effect(eff) : {};
         const durRaw = eff._source?.duration;
         return {
           id: effect.id,
@@ -1862,6 +1870,7 @@ export class FoundryDataAccess {
                 },
               }
             : {}),
+          ...dsa5Extras,
         };
       }),
     };
@@ -8705,7 +8714,8 @@ export class FoundryDataAccess {
   async toggleTokenCondition(data: {
     tokenId: string;
     conditionId: string;
-    active: boolean;
+    active?: boolean;
+    level?: number;
   }): Promise<any> {
     this.validateFoundryState();
 
@@ -8734,8 +8744,39 @@ export class FoundryDataAccess {
         throw new Error(`Token ${data.tokenId} has no associated actor`);
       }
 
+      const systemId = (game.system as any)?.id;
+
       // Get the condition configuration for the game system
       const conditions = this.getStatusEffectList();
+
+      if (systemId === 'dsa5') {
+        const localize = (key: string) => game.i18n.localize(key);
+        const dsaCondition = findDsa5Condition(conditions, data.conditionId, localize);
+        if (!dsaCondition) {
+          throw new Error(`Condition not found: ${data.conditionId}`);
+        }
+        const outcome = await setDsa5Condition(
+          actor,
+          dsaCondition,
+          { active: data.active, level: data.level },
+          localize
+        );
+        this.auditLog('toggleTokenCondition', data, 'success');
+        return {
+          success: true,
+          tokenId: token.id,
+          tokenName: token.name,
+          ...outcome,
+          active: outcome.isActive,
+          message: `${token.name}: ${outcome.message}`,
+        };
+      }
+
+      // Levels are a DSA5 concept; elsewhere a level would be silently meaningless.
+      if (data.level !== undefined) {
+        throw new Error('The level parameter is only supported in DSA5 worlds');
+      }
+
       const condition = conditions.find(
         (c: any) =>
           c.id === data.conditionId || c.name?.toLowerCase() === data.conditionId.toLowerCase()
@@ -8745,8 +8786,6 @@ export class FoundryDataAccess {
         throw new Error(`Condition not found: ${data.conditionId}`);
       }
 
-      const systemId = (game.system as any)?.id;
-
       // PF2e opens a damage editor dialog for this one instead of applying anything.
       if (systemId === 'pf2e' && condition.id === 'persistent-damage') {
         throw new Error(
@@ -8754,9 +8793,7 @@ export class FoundryDataAccess {
         );
       }
 
-      // DSA5 keeps its original handling below: its conditions carry their own effect data,
-      // and it isn't installed where this change was checked.
-      if (systemId !== 'dsa5' && condition.id && typeof actor.toggleStatusEffect === 'function') {
+      if (condition.id && typeof actor.toggleStatusEffect === 'function') {
         // Foundry's own API, which systems override: PF2e routes its condition slugs to its
         // Item-based conditions, dnd5e handles exclusive groups, and core removes only the
         // status's own effect (or effects carrying that status alone). Hand-building an
@@ -8765,7 +8802,7 @@ export class FoundryDataAccess {
         // Incapacitated on dnd5e.
         await actor.toggleStatusEffect(condition.id, { active: data.active });
       } else if (data.active) {
-        // Add the condition - handle DSA5 and other systems
+        // Fallback for actors without toggleStatusEffect or conditions without an id
         const effectData: any = {
           name: condition.name || condition.label || condition.id,
           icon: condition.icon || condition.img,
@@ -8774,18 +8811,6 @@ export class FoundryDataAccess {
         // Add statuses for systems that support it (D&D5e, PF2e)
         if (condition.id) {
           effectData.statuses = [condition.id];
-        }
-
-        // DSA5-specific: Copy all properties from the condition
-        // DSA5 conditions have different structure than D&D5e/PF2e
-        if ((game.system as any)?.id === 'dsa5') {
-          // For DSA5, use the condition's full data structure
-          Object.assign(effectData, {
-            flags: condition.flags || {},
-            changes: condition.changes || [],
-            duration: condition.duration || {},
-            origin: condition.origin,
-          });
         }
 
         await actor.createEmbeddedDocuments('ActiveEffect', [effectData]);
@@ -8797,7 +8822,7 @@ export class FoundryDataAccess {
           if (effect.statuses?.has(data.conditionId)) {
             return true;
           }
-          // Check by name (fallback for all systems including DSA5)
+          // Check by name (fallback for systems without statuses)
           if (effect.name?.toLowerCase() === data.conditionId.toLowerCase()) {
             return true;
           }
@@ -8862,6 +8887,18 @@ export class FoundryDataAccess {
 
     try {
       const conditions = this.getStatusEffectList();
+
+      // DSA5 names and descriptions are i18n keys, and many conditions have levels.
+      if (game.system?.id === 'dsa5') {
+        const localize = (key: string) => game.i18n.localize(key);
+        return {
+          success: true,
+          gameSystem: game.system.id,
+          conditions: conditions.map((condition: any) =>
+            describeDsa5Condition(condition, localize)
+          ),
+        };
+      }
 
       return {
         success: true,
