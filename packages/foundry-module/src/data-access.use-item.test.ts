@@ -256,3 +256,71 @@ describe('FoundryDataAccess.useItem targeting', () => {
     ]);
   });
 });
+
+describe('FoundryDataAccess.useItem in DSA5', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("runs a weapon through DSA5's attack test after targeting and returns the roll", async () => {
+    const target = createToken('target-1', 'Wolf', 'actor-2');
+    const sword = { id: 'item-1', name: 'Longsword', type: 'meleeweapon' };
+    const basicTest = vi.fn().mockResolvedValue({
+      result: {
+        successLevel: 1,
+        description: 'Success',
+        characteristics: [{ char: 'attack', res: 4, suc: true, tar: 12 }],
+        damage: 8,
+        messageId: 'msg-1',
+      },
+    });
+    const setupWeapon = vi.fn(async () => {
+      // The opposed test depends on the target being set before the roll.
+      expect(target.setTarget).toHaveBeenCalled();
+      return { testData: { situationalModifiers: [], source: { type: 'meleeweapon' } } };
+    });
+    const actor = {
+      id: 'actor-1',
+      name: 'Alrike',
+      items: [sword],
+      getActiveTokens: () => [],
+      setupWeapon,
+      basicTest,
+    };
+    const actors = Object.assign([actor], {
+      get: () => undefined,
+      getName: (name: string) => (name === actor.name ? actor : undefined),
+    });
+    const scene = { id: 'scene-1', tokens: [{ object: target }] };
+    vi.stubGlobal('Hooks', { on: vi.fn() });
+    vi.stubGlobal('game', {
+      ready: true,
+      world: { id: 'world-1' },
+      user: { id: 'user-1', name: 'GM' },
+      system: { id: 'dsa5' },
+      actors,
+      scenes: Object.assign([scene], { active: scene }),
+    });
+    vi.stubGlobal('canvas', { scene, tokens: { placeables: [target], controlled: [] } });
+
+    const result = await new FoundryDataAccess().useItem({
+      actorIdentifier: 'Alrike',
+      itemIdentifier: 'Longsword',
+      targets: ['Wolf'],
+    });
+
+    expect(setupWeapon).toHaveBeenCalledWith(sword, 'attack', { bypass: true }, undefined);
+    expect(basicTest).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({
+      success: true,
+      status: 'completed',
+      action: 'attack',
+      itemName: 'Longsword',
+      actorName: 'Alrike',
+      targets: ['Wolf'],
+      roll: { outcome: 'success', damage: 8 },
+    });
+    expect(result.targeting.status).toBe('applied');
+  });
+});
