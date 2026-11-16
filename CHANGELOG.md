@@ -1,3 +1,9 @@
+## Unreleased
+
+### New Features
+
+- **DSA5 structured journals** — `dsa5-journal-read` and `dsa5-journal-manage` read and maintain the DSA5 system's own journal pages, which hold structured entries rather than text and were invisible to the generic journal tools: Dramatis Personae (NPCs and creatures with faction, tags, a linked actor, notes and their relationship to each hero), the quest log (status, priority, audience, dates, objectives, linked actors / items / journals), almanac events, and city details (temples, inns, merchants, … with quality and price level). The AP and money logs can be read. Entries are written through the system, so linking a persona to an actor fills it in as it does in Foundry, notes go to the linked actor when the entry links them, and a journal created by the tool shows up in the DSA5 almanac. Writing needs Allow Write Operations. DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features

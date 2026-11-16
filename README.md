@@ -183,6 +183,8 @@ Once connected, ask Claude Desktop:
 - **48** manage-actors (create / update / delete / place actors; update / delete embedded items — any system)
 - **49** wfrp4e-update-actor (WFRP4e Only)
 - **50** wfrp4e-add-items (WFRP4e Only)
+- **51** dsa5-journal-read (DSA5 Only — Dramatis Personae, quest log, almanac events, city details, AP / money logs)
+- **52** dsa5-journal-manage (DSA5 Only — create / update / delete entries on those pages)
 
 ## Settings
 
