@@ -163,9 +163,15 @@ export interface SystemAdapter {
    * no-op that returns the payload unchanged.
    *
    * @param system - Raw system data from the MCP caller
+   * @param context - What is known about the actor the payload is for. On create
+   *   `actorType` is set and `isNew` is true, so fields the payload leaves out are at
+   *   the system's defaults; on update neither is known.
    * @returns Normalised system data ready for Foundry
    */
-  normalizePayload?(system: Record<string, any>): Record<string, any>;
+  normalizePayload?(
+    system: Record<string, any>,
+    context?: { actorType?: string | undefined; isNew?: boolean | undefined }
+  ): Record<string, any>;
 }
 
 /**
