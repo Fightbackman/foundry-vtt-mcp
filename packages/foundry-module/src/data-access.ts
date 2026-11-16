@@ -2,6 +2,12 @@ import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
 import { permissionManager } from './permissions.js';
 import { DSA5JournalAccess } from './dsa5-journals.js';
 import { transactionManager } from './transaction-manager.js';
+import {
+  extractDSA5Creature,
+  formatDSA5CreatureResult,
+  passesDSA5Criteria,
+  type DSA5CreatureIndex,
+} from './dsa5-creature-index.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -183,7 +189,13 @@ type EnhancedCreatureIndex =
   | DnD5eCreatureIndex
   | PF2eCreatureIndex
   | CosmereRpgCreatureIndex
-  | MGT2eCreatureIndex;
+  | MGT2eCreatureIndex
+  | DSA5CreatureIndex;
+
+/** DSA5 entries carry an explicit `system` tag; the other systems are told apart by shape. */
+function isDSA5Creature(creature: EnhancedCreatureIndex): creature is DSA5CreatureIndex {
+  return (creature as DSA5CreatureIndex).system === 'dsa5';
+}
 
 interface PersistentIndexMetadata {
   version: string;
@@ -689,6 +701,8 @@ class PersistentCreatureIndex {
       return await this.buildCosmereRpgIndex(force);
     } else if (gameSystem === 'mgt2e') {
       return await this.buildMGT2eIndex(force);
+    } else if (gameSystem === 'dsa5') {
+      return await this.buildDSA5Index(force);
     } else {
       // Unknown system — skip silently rather than blocking world load
       console.warn(
@@ -1402,6 +1416,89 @@ class PersistentCreatureIndex {
       if (progressNotification) {
         progressNotification.remove();
       }
+    }
+  }
+
+  // ─── dsa5 index builder ─────────────────────────────────────────────────────
+  // Extraction and filtering live in dsa5-creature-index.ts.
+
+  private async buildDSA5Index(_force = false): Promise<DSA5CreatureIndex[]> {
+    this.buildInProgress = true;
+    const startTime = Date.now();
+    let progressNotification: any = null;
+    let totalErrors = 0;
+
+    try {
+      const actorPacks = Array.from(game.packs.values()).filter(
+        pack => pack.metadata.type === 'Actor'
+      );
+      const enhancedCreatures: DSA5CreatureIndex[] = [];
+      const packFingerprints = new Map<string, PackFingerprint>();
+
+      this.info(`Starting DSA5 creature index build from ${actorPacks.length} packs...`);
+
+      for (let i = 0; i < actorPacks.length; i++) {
+        const pack = actorPacks[i];
+        if (!pack.indexed) await pack.getIndex({});
+        packFingerprints.set(pack.metadata.id, this.generatePackFingerprint(pack));
+
+        if (i % 3 === 0) {
+          if (progressNotification) progressNotification.remove();
+          progressNotification = this.info(
+            `Building DSA5 index... ${Math.round((i / actorPacks.length) * 100)}% — ${pack.metadata.label}`
+          );
+        }
+
+        try {
+          // Full documents: the values worth indexing (maximum LeP, Ausweichen,
+          // Rüstungsschutz) are derived when the actor is prepared.
+          const documents = await pack.getDocuments();
+          for (const doc of documents) {
+            try {
+              const creature = extractDSA5Creature(doc, pack);
+              if (creature) enhancedCreatures.push(creature);
+            } catch (error) {
+              console.warn(`[${this.moduleId}] Failed to index ${(doc as any).name}:`, error);
+              totalErrors++;
+            }
+          }
+        } catch (error) {
+          console.warn(`[${this.moduleId}] Failed to process pack ${pack.metadata.label}:`, error);
+          totalErrors++;
+        }
+      }
+
+      if (progressNotification) progressNotification.remove();
+
+      const persistentIndex: PersistentEnhancedIndex = {
+        metadata: {
+          version: this.INDEX_VERSION,
+          timestamp: Date.now(),
+          packFingerprints,
+          totalCreatures: enhancedCreatures.length,
+          gameSystem: 'dsa5',
+        },
+        creatures: enhancedCreatures,
+      };
+
+      await this.savePersistedIndex(persistentIndex);
+
+      const secs = Math.round((Date.now() - startTime) / 1000);
+      const errText = totalErrors > 0 ? ` (${totalErrors} errors)` : '';
+      this.info(
+        `DSA5 creature index complete! ${enhancedCreatures.length} actors indexed in ${secs}s${errText}`
+      );
+
+      return enhancedCreatures;
+    } catch (error) {
+      if (progressNotification) progressNotification.remove();
+      const msg = `Failed to build DSA5 creature index: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(`[${this.moduleId}] ${msg}`);
+      ui.notifications?.error(msg);
+      throw error;
+    } finally {
+      this.buildInProgress = false;
+      if (progressNotification) progressNotification.remove();
     }
   }
 
@@ -3272,6 +3369,8 @@ export class FoundryDataAccess {
       // Sort by power level then name for consistent ordering (system-aware).
       // Power-level dial: tier (cosmere), level (pf2e), challengeRating (dnd5e).
       const powerLevel = (c: EnhancedCreatureIndex): number => {
+        // DSA5 has no level or challenge rating; Lebensenergie is the closest dial.
+        if (isDSA5Creature(c)) return c.lifePoints;
         if ('hits' in c && 'hasPsionics' in c) return (c as MGT2eCreatureIndex).hits;
         if ('tier' in c) return (c as CosmereRpgCreatureIndex).tier;
         if ('level' in c) return (c as PF2eCreatureIndex).level;
@@ -3290,7 +3389,9 @@ export class FoundryDataAccess {
       }
 
       // Convert enhanced creatures to result format (system-aware)
-      const results = filteredCreatures.map(creature => {
+      const results = filteredCreatures.map((creature): any => {
+        if (isDSA5Creature(creature)) return formatDSA5CreatureResult(creature);
+
         const isMGT2e = 'hits' in creature && 'hasPsionics' in creature;
         const isCosmere = !isMGT2e && 'tier' in creature;
         const isPF2e = !isMGT2e && !isCosmere && 'level' in creature;
@@ -3419,6 +3520,9 @@ export class FoundryDataAccess {
    * narrowest signal), then pf2e, then fall through to dnd5e.
    */
   private passesEnhancedCriteria(creature: EnhancedCreatureIndex, criteria: any): boolean {
+    if (isDSA5Creature(creature)) {
+      return passesDSA5Criteria(creature, criteria);
+    }
     if ('hits' in creature && 'hasPsionics' in creature) {
       return this.passesMGT2eCriteria(creature as MGT2eCreatureIndex, criteria);
     }
