@@ -457,6 +457,20 @@ describe('DSA5 journal pages', () => {
       expect(picked.page.pageName).toBe('Foes');
     });
 
+    it('does not create a journal when the entry turns out to be invalid', async () => {
+      const world = stubWorld({});
+
+      const result = await access().manage({
+        pageType: 'personae',
+        action: 'create',
+        data: { actor: 'Nobody' },
+      });
+
+      expect(result.success).toBe(false);
+      expect(world.createJournal).not.toHaveBeenCalled();
+      expect(world.settingsSet).not.toHaveBeenCalled();
+    });
+
     it('reports an unknown or ambiguous actor instead of guessing', async () => {
       const journal = makeJournal('j1', 'Havena', [
         { id: 'p1', name: 'People', type: 'dsapersonaedramatis', system: { personae: {} } },
@@ -506,7 +520,7 @@ describe('DSA5 journal pages', () => {
       });
 
       expect(result.success).toBe(true);
-      const quest = journal.pages.contents[0].system.quests.id1;
+      const quest = journal.pages.contents[0].system.quests[result.entryKey];
       expect(quest).toMatchObject({
         title: 'Find the amulet',
         priority: 1,

@@ -285,6 +285,9 @@ interface PageRef {
   page: any;
 }
 
+/** Writes one prepared entry to a page under the given key. */
+type EntryWriter = (page: any, key: string) => Promise<void>;
+
 export interface DSA5JournalReadRequest {
   pageType?: DSA5JournalPageType;
   page?: string;
@@ -375,9 +378,11 @@ export class DSA5JournalAccess {
       const data = request.data ?? {};
 
       if (request.action === 'create') {
+        // Validate and build the entry first, so bad input never leaves an empty journal.
+        const write = await this.prepareEntry(request.pageType, config, null, data, warnings);
         const target = await this.resolveCreateTarget(config, request);
         const key: string = (foundry.utils as any).randomID();
-        await this.writeEntry(request.pageType, config, target.page, key, null, data, warnings);
+        await write(target.page, key);
         await this.registerInAlmanac(config, target.journal, warnings);
         return this.manageResult(request, config, target, key, warnings, {
           ...(target.createdJournal ? { createdJournal: true } : {}),
@@ -408,7 +413,8 @@ export class DSA5JournalAccess {
       }
 
       if (Object.keys(data).length === 0) throw new Error('data must contain at least one field');
-      await this.writeEntry(request.pageType, config, ref.page, key, existing, data, warnings);
+      const write = await this.prepareEntry(request.pageType, config, existing, data, warnings);
+      await write(ref.page, key);
       await this.registerInAlmanac(config, ref.journal, warnings);
       return this.manageResult(request, config, ref, key, warnings);
     } catch (error) {
@@ -955,27 +961,34 @@ export class DSA5JournalAccess {
     await page.update({ system: { [config.collection]: { [key]: payload } } });
   }
 
-  private async writeEntry(
+  /**
+   * Validate `data` and resolve everything it references, then return the function that
+   * writes the entry. Nothing is changed in the world until that function is called.
+   */
+  private async prepareEntry(
     pageType: DSA5JournalPageType,
     config: PageTypeConfig,
-    page: any,
-    key: string,
     existing: any,
     data: Record<string, any>,
     warnings: string[]
-  ): Promise<void> {
+  ): Promise<EntryWriter> {
+    let payload: Record<string, any>;
     switch (pageType) {
       case 'personae':
-        return this.writePersona(config, page, key, existing, data, warnings);
+        return this.preparePersona(config, existing, data, warnings);
       case 'quests':
-        return this.updateEntry(config, page, key, await this.buildQuest(existing, data));
+        payload = await this.buildQuest(existing, data);
+        break;
       case 'calendar':
-        return this.updateEntry(config, page, key, this.buildCalendarEvent(existing, data));
+        payload = this.buildCalendarEvent(existing, data);
+        break;
       case 'citydetails':
-        return this.updateEntry(config, page, key, this.buildCityDetail(existing, data));
+        payload = this.buildCityDetail(existing, data);
+        break;
       default:
         throw new Error(`${pageType} pages are read-only`);
     }
+    return (page, key) => this.updateEntry(config, page, key, payload);
   }
 
   private copyFields(
@@ -994,14 +1007,12 @@ export class DSA5JournalAccess {
     }
   }
 
-  private async writePersona(
+  private async preparePersona(
     config: PageTypeConfig,
-    page: any,
-    key: string,
     existing: any,
     data: Record<string, any>,
     warnings: string[]
-  ): Promise<void> {
+  ): Promise<EntryWriter> {
     const payload: Record<string, any> = {};
     this.copyFields(data, payload, {
       text: ['name', 'subtitle', 'faction', 'img'],
@@ -1073,10 +1084,8 @@ export class DSA5JournalAccess {
       else payload.notes = html;
     }
 
-    await this.updateEntry(config, page, key, payload);
-
+    const overrides: Record<string, any> = {};
     if (actorChanged) {
-      const overrides: Record<string, any> = {};
       for (const field of [
         'name',
         'type',
@@ -1088,13 +1097,16 @@ export class DSA5JournalAccess {
       ]) {
         if (payload[field] !== undefined) overrides[field] = payload[field];
       }
-      await this.updateEntry(config, page, key, overrides);
     }
 
-    if (actorNotes !== undefined) {
-      await actor.update({ 'system.details.notes.value': actorNotes });
-      warnings.push(`Notes were saved on the linked actor "${actor.name}" (linkActorNotes).`);
-    }
+    return async (page, key) => {
+      await this.updateEntry(config, page, key, payload);
+      await this.updateEntry(config, page, key, overrides);
+      if (actorNotes !== undefined) {
+        await actor.update({ 'system.details.notes.value': actorNotes });
+        warnings.push(`Notes were saved on the linked actor "${actor.name}" (linkActorNotes).`);
+      }
+    };
   }
 
   /** Quest date: only the parts that were passed are written, so the rest is kept. */
