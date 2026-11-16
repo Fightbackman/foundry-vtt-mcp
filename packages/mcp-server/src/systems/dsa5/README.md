@@ -35,6 +35,40 @@ Supports filtering creatures by:
 - `hasSpells`: Boolean - has spellcasting abilities
 - `traits`: Array of special abilities/traits to match
 
+### Structured Journals
+
+The DSA5 system stores several kinds of campaign notes as structured journal pages instead
+of text. Two tools cover them (`tools/dsa5/journals.ts`, Foundry side in
+`foundry-module/src/dsa5-journals.ts`):
+
+- `dsa5-journal-read` — overview of all such pages, filtered entry lists, or one entry in full
+- `dsa5-journal-manage` — create, update or delete one entry
+
+| `pageType`     | DSA5 page type        | Collection in `page.system` | Writable |
+| -------------- | --------------------- | --------------------------- | -------- |
+| `personae`     | `dsapersonaedramatis` | `personae`                  | yes      |
+| `quests`       | `dsaquestlog`         | `quests`                    | yes      |
+| `calendar`     | `dsacalendar`         | `calendarentries`           | yes      |
+| `citydetails`  | `citydetails`         | `details`                   | yes      |
+| `aptracker`    | `dsaaptracker`        | `entries`                   | no       |
+| `moneytracker` | `dsamoneytracker`     | `entries`                   | no       |
+
+Behaviour worth knowing:
+
+- Numeric choices are exposed by name (quest status `open` / `ended` / `failed`, priority
+  `main` / `side` / `personal`, audience `party` / `players` / `gm`, event category, persona
+  kind) and months are 1-based (1 = Praios … 12 = Rahja, 13 = Nameless Days) or a month name.
+- A new entry goes to the page that was named, or to the only page of its type. With no such
+  page, a journal and page are created under the system's default name. Personae, quest and
+  calendar journals are added to the system's almanac settings (`calendarActors`,
+  `questlogJournals`, `calendarJournals`), as the system does itself.
+- Linking a persona to an actor lets the system fill name, image, faction and subtitle from
+  that actor; values passed explicitly are applied afterwards. With `linkActorNotes`, notes
+  are stored on the actor (`system.details.notes.value`), not on the journal entry.
+- Quest dates are partial: only the parts passed are written. Calendar events always store a
+  complete date, from which the system derives the day of the year.
+- New quests and events start hidden from players, matching the system's own "new entry".
+
 ## Architecture
 
 ### Files
