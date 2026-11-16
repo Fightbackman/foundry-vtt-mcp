@@ -8,7 +8,9 @@
  *   Incapacitated deleted a compound Paralyzed effect.
  *
  * Both tools now read the list either way, and add/remove goes through
- * Actor#toggleStatusEffect, which systems override. DSA5 keeps its original path.
+ * Actor#toggleStatusEffect, which systems override. DSA5 uses its own
+ * addCondition/removeCondition instead (see dsa5-conditions.ts), because its
+ * toggleStatusEffect adds a level per call.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,6 +34,7 @@ function stubWorld(systemId: string, statusEffects: unknown, actor: any) {
     user: { id: 'gm', name: 'GM', isGM: true },
     system: { id: systemId },
     settings: { get: () => true },
+    i18n: { localize: (key: string) => (key === 'CONDITION.prone' ? 'Liegend' : key) },
     scenes: { current: { tokens: { get: (id: string) => (id === 'tok1' ? token : undefined) } } },
   });
   vi.stubGlobal('CONFIG', { statusEffects });
@@ -161,43 +164,125 @@ describe('condition tools', () => {
     });
   });
 
-  describe('DSA5 keeps its original path', () => {
+  describe('DSA5', () => {
     const dsaStatuses = [
       {
         id: 'prone',
-        name: 'Liegend',
-        icon: 'l.svg',
-        flags: { dsa5: { value: 1 } },
-        changes: [{ key: 'system.x', value: '1' }],
+        name: 'CONDITION.prone',
+        img: 'l.svg',
+        description: 'CONDITIONDESCRIPTION.prone',
+      },
+      {
+        id: 'feared',
+        name: 'CONDITION.feared',
+        img: 'f.svg',
+        description: 'CONDITIONDESCRIPTION.feared',
+        system: { condition: { value: 1, max: 4 } },
       },
     ];
 
-    it('adds by creating an effect carrying the condition data', async () => {
-      const actor = makeActor();
+    function makeDsaActor() {
+      const actor: any = makeActor();
+      actor.effects = [];
+      actor.addCondition = vi.fn(async (id: string) => {
+        actor.effects.push({ id: 'e1', statuses: new Set([id]), system: { condition: {} } });
+        return actor.effects;
+      });
+      actor.removeCondition = vi.fn(async () => {
+        actor.effects.length = 0;
+      });
+      return actor;
+    }
+
+    it('adds through the system API, found by localized name', async () => {
+      const actor = makeDsaActor();
       stubWorld('dsa5', dsaStatuses, actor);
 
-      await access().toggleTokenCondition({ tokenId: 'tok1', conditionId: 'prone', active: true });
+      const result = await access().toggleTokenCondition({
+        tokenId: 'tok1',
+        conditionId: 'liegend',
+        active: true,
+      });
 
+      expect(actor.addCondition).toHaveBeenCalledWith('prone', 1, false, false);
       expect(actor.toggleStatusEffect).not.toHaveBeenCalled();
-      const created = actor.createEmbeddedDocuments.mock.calls[0];
-      expect(created[0]).toBe('ActiveEffect');
-      expect(created[1][0]).toMatchObject({
-        name: 'Liegend',
-        statuses: ['prone'],
-        flags: { dsa5: { value: 1 } },
-        changes: [{ key: 'system.x', value: '1' }],
+      expect(actor.createEmbeddedDocuments).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        success: true,
+        conditionId: 'prone',
+        conditionName: 'Liegend',
+        isActive: true,
       });
     });
 
-    it('removes by matching effects', async () => {
-      const actor = makeActor();
-      actor.effects.contents = [{ id: 'e1', name: 'Liegend', statuses: new Set(['prone']) }];
+    it('sets a level on a leveled condition', async () => {
+      const actor = makeDsaActor();
       stubWorld('dsa5', dsaStatuses, actor);
 
-      await access().toggleTokenCondition({ tokenId: 'tok1', conditionId: 'prone', active: false });
+      await access().toggleTokenCondition({ tokenId: 'tok1', conditionId: 'feared', level: 3 });
 
-      expect(actor.toggleStatusEffect).not.toHaveBeenCalled();
-      expect(actor.deleteEmbeddedDocuments).toHaveBeenCalledWith('ActiveEffect', ['e1']);
+      expect(actor.addCondition).toHaveBeenCalledWith('feared', 3, true, false);
+    });
+
+    it('removes through the system API', async () => {
+      const actor = makeDsaActor();
+      actor.effects.push({ id: 'e1', statuses: new Set(['prone']), system: { condition: {} } });
+      stubWorld('dsa5', dsaStatuses, actor);
+
+      const result = await access().toggleTokenCondition({
+        tokenId: 'tok1',
+        conditionId: 'prone',
+        active: false,
+      });
+
+      expect(actor.removeCondition).toHaveBeenCalledWith('prone');
+      expect(actor.deleteEmbeddedDocuments).not.toHaveBeenCalled();
+      expect(result.isActive).toBe(false);
+    });
+
+    it('lists conditions with localized names and the maximum level', async () => {
+      stubWorld('dsa5', dsaStatuses, makeDsaActor());
+
+      const result = await access().getAvailableConditions();
+
+      expect(result.conditions).toEqual([
+        {
+          id: 'prone',
+          name: 'Liegend',
+          icon: 'l.svg',
+          description: 'CONDITIONDESCRIPTION.prone',
+        },
+        {
+          id: 'feared',
+          name: 'CONDITION.feared',
+          icon: 'f.svg',
+          description: 'CONDITIONDESCRIPTION.feared',
+          maxLevel: 4,
+        },
+      ]);
+    });
+  });
+
+  it('rejects a level outside DSA5 instead of ignoring it', async () => {
+    const actor = makeActor();
+    stubWorld('dnd5e', coreStatuses, actor);
+
+    await expect(
+      access().toggleTokenCondition({ tokenId: 'tok1', conditionId: 'paralyzed', level: 2 })
+    ).rejects.toThrow(/only supported in DSA5/);
+    expect(actor.toggleStatusEffect).not.toHaveBeenCalled();
+  });
+
+  it('keeps the list output of other systems unchanged', async () => {
+    stubWorld('dnd5e', coreStatuses, makeActor());
+
+    const result = await access().getAvailableConditions();
+
+    expect(result.conditions[0]).toEqual({
+      id: 'incapacitated',
+      name: 'Incapacitated',
+      icon: 'i.svg',
+      description: '',
     });
   });
 
