@@ -157,6 +157,20 @@ const builder = new DSA5IndexBuilder();
 const index = await builder.buildIndex(packs, force);
 ```
 
+## Rolls and item use
+
+DSA5 checks are not d20 + modifier rolls, so the generic roll paths call the DSA5 system's own test pipeline instead (`packages/foundry-module/src/dsa5-rolls.ts`). The system computes the result and posts its normal chat card.
+
+- **`request-player-rolls`** posts the system's own roll request card (the one the GM's "request roll" dialog creates). `rollType: "skill"` requests a skill check (Talentprobe, `rollTarget` = skill name or item id), `rollType: "ability"` an attribute check (Eigenschaftsprobe, `rollTarget` = MU/KL/IN/CH/FF/GE/KO/KK, the English abbreviation or the localized name). `rollModifier` must be a whole number; positive makes the check easier, negative harder. Other roll types (save, attack, initiative, custom) return an error. The designated player gets the system's roll dialog with the modifier filled in; if no owner is online the card waits and the GM can use "Roll on Behalf" or "Resend". The tool returns once the card is posted, not when the player has rolled; the outcome and quality level appear on the card.
+- **`dsa5-roll-check`** rolls as the GM for any actor, NPC or creature, without a dialog: `skill`, `attribute`, `attack` / `parry` (weapon, creature trait, combat skill or `weaponless`), `dodge` and `spell` (spell, liturgy, ritual, ceremony). It returns the dice and target values, the outcome, quality level and remaining skill points, damage on an attack hit, and the AsP/KaP cost for spells. Targeted tokens turn an attack into an opposed test; a parry or dodge by the attacked token (pass its token id when it is unlinked) resolves that test as on the sheet.
+- **`use-item`** does what the character sheet does: weapons and attack traits roll an attack, spells/liturgies/rituals/ceremonies their casting test, skills a skill check, consumables and plants are consumed, everything else is posted to chat. Its result includes the roll summary.
+
+Limitations:
+
+1. Without a dialog only the system's automatic modifiers (active effects, conditions) and the given modifier apply. Inputs the roll dialog asks for, such as the multiple-defense penalty, target size, reach comparison, combat maneuvers and spell modifications, are not applied; include them in the modifier.
+2. Spell and liturgy costs are reported but not deducted. In DSA5 the caster pays them from the chat card's context menu, and `dsa5-roll-check` / `use-item` leave that step to the GM as well.
+3. Regeneration, falling damage and group checks are not covered; regeneration can still be requested through the system's own request dialog in Foundry.
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:
