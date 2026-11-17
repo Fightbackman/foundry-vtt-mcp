@@ -312,6 +312,16 @@ Rüstungsschutz, Belastung and the AT / PA / FK and damage of each weapon are de
 - The AP tracker only records when the world setting "AP tracking" is on and the actor has a player owner; results report this as `apTracker`.
 - Advantages and special abilities with levels are not covered (their costs depend on adoption dialogs).
 
+## Adding Items Like the Sheet (`dsa5-add-items`)
+
+`dsa5-add-items` (module side: `packages/foundry-module/src/dsa5-add-items.ts`) adds items to an actor through the same system code a drop on the sheet runs, instead of creating bare documents:
+
+- Advantages / disadvantages: `AdvantageRulesDSA5._vantageReturnFunction`; special abilities: `SpecialabilityRulesDSA5._specialabilityReturnFunction` — the dialog-free halves behind the adoption dialog. `adoption` replaces the dialog choice (a Talent, spell, the rule's fixed list or free text, `adoptionDetail` for the free-text field of special abilities); `step` sets the level (the system charges every step; an existing item is raised one step per call).
+- Everything else goes through the unrendered `actor.sheet`: `_addSpellOrLiturgy`, `_addLoot` (stacking via `Itemdsa5.stackItems`), `_addMoney`, `_addDisease`, `_addUniqueItem`, `_addTrait` (creature sheet only), `_handleApplication`, `_handleSpellExtension`; item packages through `ItempackageData.resolvePackage`. Species, culture and career are refused (wizards).
+- `checkEnoughXP` is wrapped on the actor instance for the call: the system's dialog at 0 AP total never opens, an unaffordable item is refused (the system never overspends), and `free: true` books no AP and writes no AP tracker entry.
+- Adoption rules (`DSA5.vantagesNeedingAdaption`, `DSA5.AbilitiesNeedingAdaption`) are registered by the official content modules; without them, items named like `Begabung ()` are refused instead of being added unadopted.
+- `action: "remove"` runs the sheet's `_cleverDeleteItem` (AP refund for advantages, special abilities, spells and their extensions).
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:

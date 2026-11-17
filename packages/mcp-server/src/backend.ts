@@ -38,6 +38,7 @@ import { WFRP4eUpdateActorTools } from './tools/wfrp4e/update-actor.js';
 import { WFRP4eAddItemsTools } from './tools/wfrp4e/add-items.js';
 import { DSA5JournalTools } from './tools/dsa5/journals.js';
 import { DSA5AdvanceTools } from './tools/dsa5/advance.js';
+import { DSA5AddItemsTools } from './tools/dsa5/add-items.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
@@ -1233,6 +1234,7 @@ async function startBackend(): Promise<void> {
   const wfrp4eAddItemsTools = new WFRP4eAddItemsTools({ foundryClient, logger });
   const dsa5JournalTools = new DSA5JournalTools({ foundryClient, logger });
   const dsa5AdvanceTools = new DSA5AdvanceTools({ foundryClient, logger });
+  const dsa5AddItemsTools = new DSA5AddItemsTools({ foundryClient, logger });
 
   // Initialize mapgen-style backend components for map generation
   let mapGenerationJobQueue: any = null;
@@ -1466,6 +1468,7 @@ async function startBackend(): Promise<void> {
 
     ...dsa5JournalTools.getToolDefinitions(),
     ...dsa5AdvanceTools.getToolDefinitions(),
+    ...dsa5AddItemsTools.getToolDefinitions(),
 
     ...tokenManipulationTools.getToolDefinitions(),
 
@@ -1636,6 +1639,10 @@ async function startBackend(): Promise<void> {
                   result = await dsa5JournalTools.handleManage(args);
                 case 'dsa5-advance':
                   result = await dsa5AdvanceTools.handleAdvance(args);
+                  break;
+
+                case 'dsa5-add-items':
+                  result = await dsa5AddItemsTools.handleAddItems(args);
 
                   break;
 

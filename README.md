@@ -188,6 +188,7 @@ Once connected, ask Claude Desktop:
 - **53** dsa5-roll-check (DSA5 Only)
 - **54** dsa5-apply-damage (apply damage / healing / regeneration / AsP & KaP — DSA5 Only)
 - **55** dsa5-advance (raise / lower / preview with AP, award AP — DSA5 Only)
+- **56** dsa5-add-items (DSA5 Only)
 
 ## Settings
 
