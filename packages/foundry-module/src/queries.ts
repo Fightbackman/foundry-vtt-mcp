@@ -120,6 +120,10 @@ export class QueryHandlers {
     // DSA5: add/remove items the way the character sheet does
     CONFIG.queries[`${modulePrefix}.dsa5AddItems`] = this.handleDsa5AddItems.bind(this);
 
+    // DSA5 money (system payment API) and party (group actor, GM menu, group Schicksalspunkte)
+    CONFIG.queries[`${modulePrefix}.dsa5Money`] = this.handleDsa5Money.bind(this);
+    CONFIG.queries[`${modulePrefix}.dsa5Party`] = this.handleDsa5Party.bind(this);
+
     // Token manipulation queries
     CONFIG.queries[`${modulePrefix}.moveToken`] = this.handleMoveToken.bind(this);
     CONFIG.queries[`${modulePrefix}.updateToken`] = this.handleUpdateToken.bind(this);
@@ -1075,6 +1079,48 @@ export class QueryHandlers {
     } catch (error) {
       throw new Error(
         `Failed to award DSA5 AP: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * DSA5: read or change actors' money through the system's payment API. GM-only.
+   */
+  async handleDsa5Money(data: any): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+      this.dataAccess.validateFoundryState();
+      if (!data?.action) {
+        throw new Error('action is required');
+      }
+      return await this.dataAccess.dsa5Money(data);
+    } catch (error) {
+      throw new Error(
+        `Failed to handle DSA5 money: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * DSA5: read the party, change Schicksalspunkte and party membership. GM-only.
+   */
+  async handleDsa5Party(data: any): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+      this.dataAccess.validateFoundryState();
+      if (!data?.action) {
+        throw new Error('action is required');
+      }
+      return await this.dataAccess.dsa5Party(data);
+    } catch (error) {
+      throw new Error(
+        `Failed to handle DSA5 party: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }

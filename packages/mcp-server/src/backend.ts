@@ -40,6 +40,7 @@ import { DSA5JournalTools } from './tools/dsa5/journals.js';
 import { DSA5AdvanceTools } from './tools/dsa5/advance.js';
 import { DSA5AddItemsTools } from './tools/dsa5/add-items.js';
 import { WorldTimeTools } from './tools/world-time.js';
+import { DSA5MoneyPartyTools } from './tools/dsa5/money-party.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
@@ -1238,6 +1239,7 @@ async function startBackend(): Promise<void> {
   const dsa5AddItemsTools = new DSA5AddItemsTools({ foundryClient, logger });
 
   const worldTimeTools = new WorldTimeTools({ foundryClient, logger });
+  const dsa5MoneyPartyTools = new DSA5MoneyPartyTools({ foundryClient, logger });
 
   // Initialize mapgen-style backend components for map generation
   let mapGenerationJobQueue: any = null;
@@ -1473,6 +1475,7 @@ async function startBackend(): Promise<void> {
     ...dsa5AdvanceTools.getToolDefinitions(),
     ...dsa5AddItemsTools.getToolDefinitions(),
     ...worldTimeTools.getToolDefinitions(),
+    ...dsa5MoneyPartyTools.getToolDefinitions(),
 
     ...tokenManipulationTools.getToolDefinitions(),
 
@@ -1653,6 +1656,15 @@ async function startBackend(): Promise<void> {
 
                 case 'world-time':
                   result = await worldTimeTools.handleWorldTime(args);
+                  break;
+
+                case 'dsa5-money':
+                  result = await dsa5MoneyPartyTools.handleMoney(args);
+
+                  break;
+
+                case 'dsa5-party':
+                  result = await dsa5MoneyPartyTools.handleParty(args);
 
                   break;
 

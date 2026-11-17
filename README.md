@@ -190,6 +190,8 @@ Once connected, ask Claude Desktop:
 - **55** dsa5-advance (raise / lower / preview with AP, award AP — DSA5 Only)
 - **56** dsa5-add-items (DSA5 Only)
 - **57** world-time (get / advance / set the in-game date — any system, Aventurian calendar in DSA5)
+- **58** dsa5-money (get / pay / receive / transfer money through the system's payment rules — DSA5 Only)
+- **59** dsa5-party (party members, group and hero Schicksalspunkte, party membership — DSA5 Only)
 
 ## Settings
 

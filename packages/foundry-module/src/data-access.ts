@@ -32,6 +32,12 @@ import {
   dsa5PartyActors,
   type Dsa5AdvanceRequest,
 } from './dsa5-advancement.js';
+import {
+  dsa5Money,
+  dsa5Party,
+  type Dsa5MoneyRequest,
+  type Dsa5PartyRequest,
+} from './dsa5-money-party.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -7737,6 +7743,60 @@ export class FoundryDataAccess {
       console.error(`[${MODULE_ID}] Error getting actor ownership:`, error);
       throw error;
     }
+  }
+
+  /**
+   * DSA5: read, pay, receive or transfer money through the system's own payment API
+   * (see dsa5-money-party.ts). get needs no write permission.
+   */
+  async dsa5Money(data: Dsa5MoneyRequest): Promise<any> {
+    this.validateFoundryState();
+    const systemId = (game.system as any).id;
+    if (systemId !== 'dsa5') {
+      return {
+        success: false,
+        error: `dsa5-money requires the DSA5 system (current: "${systemId}")`,
+      };
+    }
+    if (data.action !== 'get') {
+      const permissionCheck = permissionManager.checkWritePermission('manageMoney');
+      if (!permissionCheck.allowed) {
+        throw new Error(`${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`);
+      }
+      permissionManager.auditPermissionCheck('manageMoney', permissionCheck, data);
+    }
+    const result = await dsa5Money(data);
+    if (data.action !== 'get') {
+      this.auditLog('dsa5Money', data, result.success ? 'success' : 'failure', result.error);
+    }
+    return result;
+  }
+
+  /**
+   * DSA5: read the party, change Schicksalspunkte (group or hero) and party membership
+   * (see dsa5-money-party.ts). get needs no write permission.
+   */
+  async dsa5Party(data: Dsa5PartyRequest): Promise<any> {
+    this.validateFoundryState();
+    const systemId = (game.system as any).id;
+    if (systemId !== 'dsa5') {
+      return {
+        success: false,
+        error: `dsa5-party requires the DSA5 system (current: "${systemId}")`,
+      };
+    }
+    if (data.action !== 'get') {
+      const permissionCheck = permissionManager.checkWritePermission('manageParty');
+      if (!permissionCheck.allowed) {
+        throw new Error(`${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`);
+      }
+      permissionManager.auditPermissionCheck('manageParty', permissionCheck, data);
+    }
+    const result = await dsa5Party(data);
+    if (data.action !== 'get') {
+      this.auditLog('dsa5Party', data, result.success ? 'success' : 'failure', result.error);
+    }
+    return result;
   }
 
   /**
