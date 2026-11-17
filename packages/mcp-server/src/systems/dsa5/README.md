@@ -157,6 +157,15 @@ const builder = new DSA5IndexBuilder();
 const index = await builder.buildIndex(packs, force);
 ```
 
+## Actor Creation Defaults
+
+DSA5 adds its per-actor defaults in the static `Actordsa5.create`: all skills and combat skills from the skills compendium, the coin items, 0 fate points for non-heroes and a starting LeP of 16. Foundry's core `Actor.create` / `Actor.createDocuments` never call that override, so the module (`packages/foundry-module/src/dsa5-actor-create.ts`) creates each actor through `CONFIG.Actor.documentClass.create` instead. This is used by `manage-actors` (`action: "create"`) and by `import-dsa5-actor-from-json` for mapped formats (not for raw Foundry exports, which are taken as-is like Foundry's own JSON import).
+
+- `Actordsa5.create` skips every default once `items` is present, so caller items are added after creation. An item of type `skill`, `combatskill` or `money` whose name matches a default (case-insensitive) updates that default instead of adding a duplicate; the caller's fields win.
+- The system's fixed 16 LeP only fit an unmodified hero. Unless `system.status.wounds.value` is given (an explicit value, even 0, is kept), the stored LeP of characters, NPCs and creatures are set to the derived maximum, which depends on KO, `wounds.initial` and items. AsP and KaP are left alone, as the system does not set them for new actors either.
+- Group, vehicle and merchant/loot types go through the same system path and get exactly what the system gives them.
+- `create-actor-from-compendium` and `create-dsa5-character-from-archetype` copy a compendium actor with its items, which matches what the system does for an actor created with items; they are unchanged.
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:

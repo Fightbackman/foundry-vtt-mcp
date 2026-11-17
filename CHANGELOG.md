@@ -1,3 +1,9 @@
+## Unreleased
+
+### Fixes
+
+- **`manage-actors` create in DSA5 worlds** — actors were created through Foundry's core `Actor.createDocuments`, which skips the defaults DSA5 gives every new actor: no Talente, no Kampftechniken, no coins, 3 Schicksalspunkte on NPCs and creatures, and heroes stored at 0 LeP, which the system immediately answered with Pain and Incapacitated. Actors are now created through the system's own creation path, start at their derived maximum LeP unless the call sets the current LeP, and the folder and result shape are unchanged. Actor definitions accept an optional `items` array; an item whose type and name match a default skill, combat skill or coin updates that entry (so a given talent value wins) instead of adding a duplicate. `import-dsa5-actor-from-json` had the same gap for Dark Aid, Optolith-style and custom DSA5 imports and now builds new actors the same way; raw Foundry exports are still imported as-is. DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
