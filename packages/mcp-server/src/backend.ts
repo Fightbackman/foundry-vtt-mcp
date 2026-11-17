@@ -1641,12 +1641,16 @@ async function startBackend(): Promise<void> {
 
                 case 'dsa5-journal-manage':
                   result = await dsa5JournalTools.handleManage(args);
+                  break;
+
                 case 'dsa5-advance':
                   result = await dsa5AdvanceTools.handleAdvance(args);
                   break;
 
                 case 'dsa5-add-items':
                   result = await dsa5AddItemsTools.handleAddItems(args);
+                  break;
+
                 case 'world-time':
                   result = await worldTimeTools.handleWorldTime(args);
 
