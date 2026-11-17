@@ -270,6 +270,17 @@ DSA5 adds its per-actor defaults in the static `Actordsa5.create`: all skills an
 - Group, vehicle and merchant/loot types go through the same system path and get exactly what the system gives them.
 - `create-actor-from-compendium` and `create-dsa5-character-from-archetype` copy a compendium actor with its items, which matches what the system does for an actor created with items; they are unchanged.
 
+## Combat View in `get-character`
+
+Rüstungsschutz, Belastung and the AT / PA / FK and damage of each weapon are derived when the character sheet renders; the actor stores only the parts (`system.totalArmor` is just the bonus from effects). The bridge module therefore computes them in Foundry with the system's own code (`packages/foundry-module/src/dsa5-combat.ts`) and sends them as `dsa5Combat`, which `combat.ts` shapes for the response:
+
+- `actor.prepareSheet()` — the worn melee weapons (incl. shield parry, off-hand modifiers, damage over the Schadensschwelle), worn ranged weapons with the loaded ammunition, a creature's natural attacks (`trait` items of type meleeAttack / rangeAttack), worn armor and Raufen values.
+- `Actordsa5.armorValue(actor)` — total Rüstungsschutz as damage application uses it (also counts creature armor traits).
+- `system.condition.encumbered` / `system.armorEncumbrance` — the active Belastung level and the part caused by armor.
+- `DSA5Payment._actorsMoney(actor)` — the currency total in Silbertaler (Mammon is not counted) and the coins carried.
+
+`get-character` then reports `stats.armor`, `stats.encumbrance`, `stats.combat` (`armor`, `encumbrance`, `meleeWeapons`, `rangedWeapons`, `naturalAttacks`, `brawling`) and `stats.money`; `basicInfo` repeats Rüstungsschutz and Belastung. The values are what the sheet shows, before situational roll modifiers (Belastung, Schmerz and other conditions are applied when rolling). Character, NPC and creature actors only. With an older bridge module only Rüstungsschutz is estimated from the worn armor items. `search-character-items` reads `system.worn.value` as `equipped` and `system.quantity.value` as `quantity`, and its `equipped` category returns only worn weapons, armor and wearable equipment.
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:

@@ -20,6 +20,12 @@
 
 - **`manage-actors` create in DSA5 worlds** — actors were created through Foundry's core `Actor.createDocuments`, which skips the defaults DSA5 gives every new actor: no Talente, no Kampftechniken, no coins, 3 Schicksalspunkte on NPCs and creatures, and heroes stored at 0 LeP, which the system immediately answered with Pain and Incapacitated. Actors are now created through the system's own creation path, start at their derived maximum LeP unless the call sets the current LeP, and the folder and result shape are unchanged. Actor definitions accept an optional `items` array; an item whose type and name match a default skill, combat skill or coin updates that entry (so a given talent value wins) instead of adding a duplicate. `import-dsa5-actor-from-json` had the same gap for Dark Aid, Optolith-style and custom DSA5 imports and now builds new actors the same way; raw Foundry exports are still imported as-is. DSA5 worlds only.
 
+- **DSA5 armor, Belastung, weapons and money in `get-character`** — a hero wearing chain mail showed no armor, because the adapter read `system.totalArmor`, which only holds the bonus from effects; Belastung, the AT / PA / FK and damage of the wielded weapons and the money the actor carries were missing entirely. The bridge now computes them in Foundry with the system's own sheet code, and `get-character` reports the total Rüstungsschutz and Belastung (also in `basicInfo`), each worn weapon with its AT / PA or FK, damage, reach or range and loaded ammunition (shield parry and off-hand modifiers included, as on the character sheet), a creature's natural attacks, the Raufen values and the currency total in Silbertaler with the coins carried. DSA5 worlds only.
+
+- **DSA5 items in `search-character-items`** — worn DSA5 armor was reported as `equipped: false` and left out of `category: "equipped"`, and quantities came back as `{ "value": 1 }`. `equipped` now reflects the item's worn state, the `equipped` category returns exactly the worn weapons, armor and wearable equipment, and all DSA5 equipment types (melee and ranged weapons, ammunition, coins, …) report their quantity as a number. DSA5 worlds only.
+
+- **Empty item descriptions in `get-compendium-item` and `get-character-entity`** — an item whose description is stored as an empty `{ value: "" }` came back as the text `{"value":""}` or as that object; it is now an empty string. This affects every system that stores descriptions this way.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
