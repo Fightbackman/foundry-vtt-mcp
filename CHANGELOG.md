@@ -1,3 +1,9 @@
+## Unreleased
+
+### New Features
+
+- **`dsa5-add-items`** — add items to a DSA5 actor the way dropping them on the character sheet does, or remove them with the sheet's AP refund. Items are given by UUID or by exact name (world items and compendiums; ambiguous names are refused with the candidates) and copied in full, so their effects and flags are kept. Advantages, disadvantages and special abilities go through the system's rules (AP per step, `step` for the level, `adoption` for e.g. "Begabung (Klettern)", refused with the valid choices when missing; adding one the actor already has raises its step), spells, liturgies, rituals, ceremonies, cantrips and blessings cost AP from their Steigerungsfaktor, equipment, weapons, ammunition and consumables stack onto equal items, money is added to the existing coins, and item packages are resolved. AP are booked and the AP tracker is written like on the sheet; an item the hero cannot afford is refused, and `free` adds it without AP as a GM ruling. Species, culture and career need the system's wizards and are refused. Needs Allow Write Operations. DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
