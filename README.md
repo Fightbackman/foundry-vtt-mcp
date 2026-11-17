@@ -183,6 +183,7 @@ Once connected, ask Claude Desktop:
 - **48** manage-actors (create / update / delete / place actors; update / delete embedded items — any system)
 - **49** wfrp4e-update-actor (WFRP4e Only)
 - **50** wfrp4e-add-items (WFRP4e Only)
+- **51** world-time (get / advance / set the in-game date — any system, Aventurian calendar in DSA5)
 
 ## Settings
 

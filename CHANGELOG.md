@@ -1,3 +1,9 @@
+## Unreleased
+
+### New Features
+
+- **`world-time`** — read, advance or set the in-game date and time through the world's calendar, in any system. `get` returns the date as year, month (number and name), day, weekday, time of day and season, the system's own formatted date and the raw world time. `advance` moves time by seconds, minutes, hours, days and/or weeks (negative values rewind); `set` jumps to a date given in parts, keeping the parts left out, and refuses dates the calendar does not have with the valid range. Time changes go through Foundry's own `game.time.advance`, so timed effects expire as usual, and the reply lists the effects that expired. Changing the time needs Allow Write Operations. In DSA5 worlds the Aventurian calendar is used (month names such as "Rondra" or "Namenlose Tage", years BF), reads add moon phase, time of day and holidays, and changes also report decayed condition levels and the time-of-day change that drives the system's automatic scene daylight.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
