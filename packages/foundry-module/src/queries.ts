@@ -110,6 +110,9 @@ export class QueryHandlers {
     // DSA5 structured journal pages (Dramatis Personae, quest log, almanac, city details)
     CONFIG.queries[`${modulePrefix}.dsa5ReadJournals`] = this.handleDsa5ReadJournals.bind(this);
     CONFIG.queries[`${modulePrefix}.dsa5ManageJournal`] = this.handleDsa5ManageJournal.bind(this);
+    // DSA5 advancement with Abenteuerpunkte (raise/lower/preview, AP awards)
+    CONFIG.queries[`${modulePrefix}.dsa5Advance`] = this.handleDsa5Advance.bind(this);
+    CONFIG.queries[`${modulePrefix}.dsa5AwardAP`] = this.handleDsa5AwardAP.bind(this);
 
     // Token manipulation queries
     CONFIG.queries[`${modulePrefix}.moveToken`] = this.handleMoveToken.bind(this);
@@ -1004,6 +1007,48 @@ export class QueryHandlers {
       return { success: false, error: 'pageType and action are required' };
     }
     return await this.dsa5Journals.manage(data);
+  }
+
+  /**
+   * DSA5: raise, lower or preview a value with Abenteuerpunkte. GM-only.
+   */
+  async handleDsa5Advance(data: any): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+      this.dataAccess.validateFoundryState();
+      if (!data?.actor || !data?.target) {
+        throw new Error('actor and target are required');
+      }
+      return await this.dataAccess.dsa5Advance(data);
+    } catch (error) {
+      throw new Error(
+        `Failed to advance DSA5 value: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * DSA5: award Abenteuerpunkte to actors or the party. GM-only.
+   */
+  async handleDsa5AwardAP(data: any): Promise<any> {
+    try {
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+      this.dataAccess.validateFoundryState();
+      if (!Number.isInteger(data?.amount) || data.amount <= 0) {
+        throw new Error('amount must be a positive integer');
+      }
+      return await this.dataAccess.dsa5AwardAP(data);
+    } catch (error) {
+      throw new Error(
+        `Failed to award DSA5 AP: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
   }
 
   /**

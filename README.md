@@ -113,7 +113,7 @@ Once connected, ask Claude Desktop:
 
 ## Features
 
-- **50 MCP Tools** that allow Claude to interact with Foundry
+- **51 MCP Tools** that allow Claude to interact with Foundry
 - **D&D 5e NPC Creation Suite**: Build complete NPCs from prompts — stat block, attacks, saves, auras, and spellcasting
 - **Mongoose Traveller 2e (mgt2e) Support**: Full actor lifecycle — create/update/delete travellers, NPCs, creatures, and spacecraft with skill shorthand normalisation; creature compendium index with characteristic DMs; weapon-trait enum reference
 - **WFRP4e Support**: Character reading plus editing — update characteristics, wounds, skills and careers, and add or remove items on existing actors
@@ -187,6 +187,7 @@ Once connected, ask Claude Desktop:
 - **52** dsa5-journal-manage (DSA5 Only — create / update / delete entries on those pages)
 - **53** dsa5-roll-check (DSA5 Only)
 - **54** dsa5-apply-damage (apply damage / healing / regeneration / AsP & KaP — DSA5 Only)
+- **55** dsa5-advance (raise / lower / preview with AP, award AP — DSA5 Only)
 
 ## Settings
 

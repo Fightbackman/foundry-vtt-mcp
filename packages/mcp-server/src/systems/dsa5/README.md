@@ -300,6 +300,18 @@ Rüstungsschutz, Belastung and the AT / PA / FK and damage of each weapon are de
 
 `get-character` then reports `stats.armor`, `stats.encumbrance`, `stats.combat` (`armor`, `encumbrance`, `meleeWeapons`, `rangedWeapons`, `naturalAttacks`, `brawling`) and `stats.money`; `basicInfo` repeats Rüstungsschutz and Belastung. The values are what the sheet shows, before situational roll modifiers (Belastung, Schmerz and other conditions are applied when rolling). Character, NPC and creature actors only. With an older bridge module only Rüstungsschutz is estimated from the worn armor items. `search-character-items` reads `system.worn.value` as `equipped` and `system.quantity.value` as `quantity`, and its `equipped` category returns only worn weapons, armor and wearable equipment.
 
+### Advancement with AP (`dsa5-advance`)
+
+`packages/mcp-server/src/tools/dsa5/advance.ts` (tool) and `packages/foundry-module/src/dsa5-advancement.ts` (bridge). Raising and lowering calls the system's own sheet methods on an unrendered sheet (`item.sheet._advanceStep()` / `_refundStep()`, `actor.sheet._advanceAttribute()` / `_refundAttributeAdvance()`, `_advancePoints()` / `_refundPointsAdvance()`), one step at a time, so cost, AP bookkeeping and the AP tracker entry are the system's. The tool adds a cost plan from `DSA5_Utility._calculateAdvCost`, reads the maximum through the sheet's `_checkMaximumItemAdvancement` (bought points: `pointAdvancementLimit`), and checks free AP before each step, because the system's `checkEnoughXP` opens a dialog when a hero has 0 AP total.
+
+- Only actors with `canAdvance` (characters, familiars, pets) are accepted, like the sheet; npcs and creatures are refused.
+- Attributes count `initial + advances` (the value the sheet prices and the tracker logs). The system enforces no attribute maximum, so none is applied.
+- Lowering never goes below the system's floor (combat techniques 6, attributes their initial value, bought points 0).
+- `free: true` writes the value directly and logs a tracker entry with cost 0; the maximum still applies unless `ignoreMaximum: true`, which is only accepted together with `free`.
+- `award` mirrors the GM menu (`masters_menu.js` `getExp`): familiars 25 %, pets 10 % (at least 1), an update of `experience.total` (the actor's `_preUpdate` writes the tracker entry) and the same chat message. `party` uses the GM menu's default list: primary party, else tracked actors, else player-owned actors.
+- The AP tracker only records when the world setting "AP tracking" is on and the actor has a player owner; results report this as `apTracker`.
+- Advantages and special abilities with levels are not covered (their costs depend on adoption dialogs).
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:
