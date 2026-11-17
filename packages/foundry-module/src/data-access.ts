@@ -8398,7 +8398,11 @@ export class FoundryDataAccess {
             name: entity.name,
             type: entity.type,
             img: entity.img,
-            description: itemSystem.description?.value || itemSystem.description || '',
+            // An empty `{ value: '' }` must not fall through to the object itself
+            description:
+              typeof itemSystem.description?.value === 'string'
+                ? itemSystem.description.value
+                : itemSystem.description || '',
             system: itemSystem,
             effects: itemData.effects ?? [],
           },

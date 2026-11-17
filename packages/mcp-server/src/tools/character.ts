@@ -366,7 +366,11 @@ export class CharacterTools {
           id: entity.id,
           name: entity.name,
           type: entity.type,
-          description: entity.system?.description?.value || entity.system?.description || '',
+          // An empty `{ value: '' }` must not fall through to the object itself
+          description:
+            typeof entity.system?.description?.value === 'string'
+              ? entity.system.description.value
+              : entity.system?.description || '',
           traits: entity.system?.traits?.value || [],
           rarity: entity.system?.traits?.rarity || 'common',
           level: entity.system?.level?.value ?? entity.system?.level,

@@ -8,6 +8,8 @@
 
 - **DSA5 items in `search-character-items`** — worn DSA5 armor was reported as `equipped: false` and left out of `category: "equipped"`, and quantities came back as `{ "value": 1 }`. `equipped` now reflects the item's worn state, the `equipped` category returns exactly the worn weapons, armor and wearable equipment, and all DSA5 equipment types (melee and ranged weapons, ammunition, coins, …) report their quantity as a number. DSA5 worlds only.
 
+- **Empty item descriptions in `get-compendium-item` and `get-character-entity`** — an item whose description is stored as an empty `{ value: "" }` came back as the text `{"value":""}` or as that object; it is now an empty string. This affects every system that stores descriptions this way.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features

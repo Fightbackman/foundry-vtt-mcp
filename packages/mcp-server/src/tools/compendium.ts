@@ -1384,9 +1384,10 @@ export class CompendiumTools {
   private stripHtml(text: string | any): string {
     if (!text) return '';
 
-    // Handle objects with value property (e.g., {value: "text"})
+    // Handle objects with value property (e.g., {value: "text"}); an empty string value
+    // means "no description", not an object to stringify
     if (typeof text === 'object' && text !== null) {
-      if (text.value) {
+      if (typeof text.value === 'string' || text.value) {
         text = text.value;
       } else if (text.content) {
         text = text.content;
