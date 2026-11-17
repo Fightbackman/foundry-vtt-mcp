@@ -70,6 +70,20 @@ export class PermissionManager {
       settingKey: 'allowWriteOperations',
       requiresGM: true,
     },
+    manageMoney: {
+      name: 'Manage Money',
+      level: PERMISSION_LEVELS.LOW_RISK,
+      description: "Pay, receive or transfer money through the game system's payment rules",
+      settingKey: 'allowWriteOperations',
+      requiresGM: false,
+    },
+    manageParty: {
+      name: 'Manage Party',
+      level: PERMISSION_LEVELS.LOW_RISK,
+      description: 'Change party membership and Schicksalspunkte (DSA5)',
+      settingKey: 'allowWriteOperations',
+      requiresGM: false,
+    },
   };
 
   /**
