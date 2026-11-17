@@ -8,6 +8,7 @@ import {
   type Dsa5CheckType,
   type Dsa5MessageMode,
 } from './dsa5-rolls.js';
+import { applyDsa5Damage, type Dsa5DamageParams } from './dsa5-damage.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -9170,6 +9171,50 @@ export class FoundryDataAccess {
       ...(data.targets?.length ? { targeting } : {}),
       ...(warnings.length > 0 ? { warnings } : {}),
     };
+  }
+
+  /**
+   * Apply damage, healing, regeneration or AsP/KaP changes to a DSA5 actor or token through
+   * the system (dsa5-apply-damage); the rules live in dsa5-damage.ts.
+   */
+  async applyDsa5Damage(data: Dsa5DamageParams & { actorIdentifier?: string }): Promise<any> {
+    this.validateFoundryState();
+
+    const systemId = (game.system as any).id;
+    if (systemId !== 'dsa5') {
+      return {
+        success: false,
+        error: `dsa5-apply-damage requires the DSA5 system (current: "${systemId}")`,
+      };
+    }
+
+    // Changes actor or token state, like the token condition tools.
+    const permissionCheck = permissionManager.checkWritePermission('modifyScene', {
+      targetIds: [data.actorIdentifier ?? data.messageId ?? ''],
+    });
+    if (!permissionCheck.allowed) {
+      return {
+        success: false,
+        error: `${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`,
+      };
+    }
+    permissionManager.auditPermissionCheck('modifyScene', permissionCheck, data);
+
+    let actor: any;
+    if (data.actorIdentifier) {
+      actor = this.findActorByIdentifier(data.actorIdentifier);
+      if (!actor) return { success: false, error: `Actor not found: ${data.actorIdentifier}` };
+    }
+
+    const { actorIdentifier, ...params } = data;
+    const result = await applyDsa5Damage(actor, params);
+    this.auditLog(
+      'applyDsa5Damage',
+      { actorIdentifier, action: data.action, messageId: data.messageId, amount: data.amount },
+      result.success ? 'success' : 'failure',
+      result.error
+    );
+    return result;
   }
 
   /**

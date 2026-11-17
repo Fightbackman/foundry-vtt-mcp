@@ -14,6 +14,8 @@
  * add what the dialog would have added with its default inputs (see applyDialogDefaults).
  */
 
+import { summarizeDsa5Opposed, type Dsa5OpposedEntry } from './dsa5-opposed.js';
+
 type AnyRecord = Record<string, any>;
 
 export type Dsa5CheckType = 'skill' | 'attribute' | 'attack' | 'parry' | 'dodge' | 'spell';
@@ -50,6 +52,7 @@ export interface Dsa5RollSummary {
   damageDescription?: string;
   cost?: { amount: number; resource: 'AsP' | 'KaP'; paid: false; note: string };
   messageId?: string;
+  opposed?: Dsa5OpposedEntry[];
 }
 
 export interface Dsa5RollOutcome {
@@ -242,7 +245,7 @@ export function summarizeDsa5Result(result: AnyRecord, sourceType?: string): Dsa
       amount: Number(finalCost),
       resource,
       paid: false,
-      note: `Not deducted automatically: as in DSA5 itself, the ${resource} are paid from the chat card's context menu.`,
+      note: `Not deducted automatically: as in DSA5 itself, the ${resource} are paid from the chat card; use dsa5-apply-damage with action "pay-cost" and this messageId.`,
     };
   }
   if (result?.messageId) summary.messageId = String(result.messageId);
@@ -380,7 +383,11 @@ async function runBypassed(
       error: `DSA5 did not roll "${prepared.name}" (no permission to roll for this actor).`,
     };
   }
-  return { summary: summarizeDsa5Result(outcome.result, prepared.sourceType) };
+  const summary = summarizeDsa5Result(outcome.result, prepared.sourceType);
+  // basicTest() has already started or answered the opposed test; report where it stands.
+  const opposed = summarizeDsa5Opposed(summary.messageId);
+  if (opposed) summary.opposed = opposed;
+  return { summary };
 }
 
 /**

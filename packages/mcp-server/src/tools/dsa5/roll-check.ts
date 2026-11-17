@@ -46,8 +46,11 @@ export class DSA5RollCheckTools {
           '(Eigenschaftsprobe, 1d20 against MU/KL/IN/CH/FF/GE/KO/KK), "attack" / "parry" with a ' +
           'weapon, creature trait or combat skill (or "weaponless"; an attack hit includes the ' +
           'damage roll), "dodge", and "spell" (spell, liturgy, ritual or ceremony; the AsP/KaP ' +
-          'cost is reported but, as in DSA5, paid from the chat card). Returns dice, target ' +
-          'values, outcome (critical/success/failure/botch), quality level and damage. Only the ' +
+          'cost is reported but, as in DSA5, not paid: use dsa5-apply-damage "pay-cost"). ' +
+          'Returns dice, target values, outcome (critical/success/failure/botch), quality level ' +
+          'and damage; attacks on targets and defenses also return "opposed": pending or ' +
+          'resolved, the winner, the damage DSA5 computed and the result card id to pass to ' +
+          'dsa5-apply-damage. Only the ' +
           "given modifier and the actor's active effects apply: dialog-only inputs (multiple " +
           'defense penalty, target size, reach, maneuvers, spell modifications) are not, so ' +
           'fold them into "modifier". To ask a PLAYER to roll, use request-player-rolls; to ' +
