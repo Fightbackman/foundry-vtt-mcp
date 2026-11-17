@@ -70,6 +70,13 @@ export class PermissionManager {
       settingKey: 'allowWriteOperations',
       requiresGM: false,
     },
+    manageCombat: {
+      name: 'Manage Combat',
+      level: PERMISSION_LEVELS.MEDIUM_RISK,
+      description: 'Create, run and end encounters: combatants, initiative, turns and rounds',
+      settingKey: 'allowWriteOperations',
+      requiresGM: true,
+    },
     deleteData: {
       name: 'Delete Data',
       level: PERMISSION_LEVELS.HIGH_RISK,

@@ -345,6 +345,17 @@ Browser side: `packages/foundry-module/src/dsa5-money-party.ts`; tools: `package
 - **Party** = `ActorPickerDialog` `#getTrackedActors`: members of the primary party group actor (setting `primaryParty`), else the GM menu's `trackedActors`, else all player-owned actors. Membership changes use `GroupData.addMember`/`removeMember` on the group actor, or the GM menu's `setTrackedHeros` (an empty list first becomes the player-owned actors, as the GM menu does when it renders). `set-primary` writes `primaryParty` like the group sheet toggle.
 - **Schicksalspunkte**: group pool in the world setting `groupschips` (`"current/max"`; the GM menu re-renders on change; `set` caps current at max like `changeGroupSchipCount`). Hero: `system.status.fatePoints.value` (the field the sheet pips write), between 0 and the derived `fatePoints.max`; the hero maximum is not changed here. The system posts no chat message for either.
 
+## Encounters (`manage-combat`)
+
+`manage-combat` is a generic tool; in DSA5 worlds it goes through the system's own `DSA5Combat` / `DSA5Combatant` overrides and adds DSA5 data (module side: `packages/foundry-module/src/combat-manager.ts`, DSA5 parts in `dsa5-encounter.ts`).
+
+- **Initiative** is rolled with the system formula (`INI + 1d6 + 1d99 * 0.00001`, INI carrying `0.01 * INI` as a tie-breaker). The system records the die as `flags.dsa5.baseRoll` only when the flag is missing, so the tool drops it before a reroll or a value set by hand; otherwise `recalcInitiative` would later restore the old value.
+- **State** per combatant: LeP, conditions with levels, other temporary effects, INI base and die, `defenseCount` with the penalty for the next parry/dodge (`RuleChaos.multipleDefenseValue`, without scoped effect overrides from the defense dialog), actions used / per round, free action used, waiting.
+- **Round changes**: DSA5 resets `defenseCount`, actions and the other round-scoped combatant fields in `nextRound`, and deals burning/bleeding damage and start-of-round regeneration from an `updateCombat` hook that it does not await. The tool waits until the world has gone quiet and then reports the before/after per combatant plus the chat cards. Those effects only run in the _active_ encounter; the tool warns when another one is advanced. Starting an encounter counts as a round change too.
+- **Defeated** uses the tracker's skull toggle, which adds the `dead` condition. For an unlinked token on a scene that is not shown in the GM tab, DSA5 skips `addCondition` (no token object) and the tool says so.
+- **End** deletes the encounter (the core confirmation dialog is skipped). A brawl (`isBrawling`) or leftover Prügelpunkte make DSA5 cancel the delete and ask in a dialog; the tool refuses those instead.
+- Combat modes (brawling, chase, naval), minion groups and waiting are shown but not changed by the tool.
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:

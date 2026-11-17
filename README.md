@@ -113,7 +113,7 @@ Once connected, ask Claude Desktop:
 
 ## Features
 
-- **51 MCP Tools** that allow Claude to interact with Foundry
+- **60 MCP Tools** that allow Claude to interact with Foundry
 - **D&D 5e NPC Creation Suite**: Build complete NPCs from prompts — stat block, attacks, saves, auras, and spellcasting
 - **Mongoose Traveller 2e (mgt2e) Support**: Full actor lifecycle — create/update/delete travellers, NPCs, creatures, and spacecraft with skill shorthand normalisation; creature compendium index with characteristic DMs; weapon-trait enum reference
 - **WFRP4e Support**: Character reading plus editing — update characteristics, wounds, skills and careers, and add or remove items on existing actors
@@ -192,6 +192,7 @@ Once connected, ask Claude Desktop:
 - **57** world-time (get / advance / set the in-game date — any system, Aventurian calendar in DSA5)
 - **58** dsa5-money (get / pay / receive / transfer money through the system's payment rules — DSA5 Only)
 - **59** dsa5-party (party members, group and hero Schicksalspunkte, party membership — DSA5 Only)
+- **60** manage-combat (create / run / end encounters: combatants, initiative, turns and rounds — any system, DSA5 extras)
 
 ## Settings
 
