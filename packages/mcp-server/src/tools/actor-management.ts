@@ -104,6 +104,16 @@ export class ActorManagementTools {
                       'System-specific data. Free-form object — use action:"describe" to get valid field names for the active system.',
                     additionalProperties: true,
                   },
+                  items: {
+                    type: 'array',
+                    description:
+                      'DSA5 worlds only (ignored elsewhere): embedded Item documents to add ' +
+                      '(each with name, type and optional system data). The actor still gets ' +
+                      "the system's default skills, combat skills and coins; an item whose type " +
+                      'and name match one of those defaults updates it instead of adding a ' +
+                      "duplicate, so the caller's values (e.g. a talent value) win.",
+                    items: { type: 'object', additionalProperties: true },
+                  },
                 },
                 required: ['name', 'type'],
               },
@@ -291,6 +301,7 @@ export class ActorManagementTools {
             type: z.string().min(1),
             img: z.string().optional(),
             system: z.record(z.any()).optional(),
+            items: z.array(z.record(z.any())).optional(),
           })
         )
         .min(1),
