@@ -157,6 +157,16 @@ const builder = new DSA5IndexBuilder();
 const index = await builder.buildIndex(packs, force);
 ```
 
+## World Time
+
+The generic `world-time` tool reads and changes `game.time` through the system's Aventurian calendar (`DSAWorldCalendar`, "Der Zwölfgöttliche Kalender"): 12 months of 30 days (Praios … Rahja) plus the 5 Namenlose Tage, years counted BF, world time 0 = 1 Praios 0 BF.
+
+- **Reads** use the system's own formatter (`formatPraiosGefaellig`, or `format24Hour` when the calendar's 24-hour setting is on) and add the moon phase (from the calendar's `timeToComponents`), the time of day (`CalendarWidget.dayTimeBackground`), the holidays and almanac entries for the day (`CalendarPicker.findHolidays`) and a Namenlose Tage flag.
+- **Months** are accepted by number (1–13), by localized name or abbreviation ("Rondra", "Namenlose Tage", "Pra"), or by the system's god-month name ("Namenloser"). The calendar's internal Gregorian keys ("July" = Praios) are deliberately not accepted.
+- **Changes** go through `game.time.advance`, so the system's `onUpdateEffectDurations` deletes run-out effects and lowers timed condition levels (one level per elapsed duration), and `DSAWorldCalendar.autoDayLight` adjusts the viewed scene's darkness when "light by day time" is on. The reply lists expired effects and reduced condition levels on world actors, their items and unlinked tokens of the viewed scene, and the time of day before and after. The darkness itself is applied by the system after the calendar widget's time animation (up to about 10 seconds), so it is not part of the reply.
+- Rewinding is allowed, as with the calendar widget's back buttons; effects that already expired are not restored.
+- The calendar setting "none" leaves Foundry's default calendar in place; the tool then behaves as in any other system.
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:

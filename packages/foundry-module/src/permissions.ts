@@ -63,6 +63,13 @@ export class PermissionManager {
       settingKey: 'allowWriteOperations',
       requiresGM: true,
     },
+    modifyWorldTime: {
+      name: 'Modify World Time',
+      level: PERMISSION_LEVELS.MEDIUM_RISK,
+      description: 'Advance or set the in-game world time (expires timed effects)',
+      settingKey: 'allowWriteOperations',
+      requiresGM: true,
+    },
     modifyWorld: {
       name: 'Modify World',
       level: PERMISSION_LEVELS.HIGH_RISK,
