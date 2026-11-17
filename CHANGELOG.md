@@ -40,6 +40,8 @@
 
 - **Empty item descriptions in `get-compendium-item` and `get-character-entity`** — an item whose description is stored as an empty `{ value: "" }` came back as the text `{"value":""}` or as that object; it is now an empty string. This affects every system that stores descriptions this way.
 
+- **Item quantities shown as `{ value: 1 }`** — systems that store an item's quantity as an object (DSA5, WFRP4e: `system.quantity.value`) leaked that raw object into `get-character` item lists, `get-character-entity` and compendium item properties, and in DSA5 also into `search-character-items` for armor, equipment and consumables. These now show the plain number; dnd5e and PF2e, which store a number, are unchanged.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features

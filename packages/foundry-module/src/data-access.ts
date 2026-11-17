@@ -2250,7 +2250,12 @@ export class FoundryDataAccess {
         systemId !== 'dsa5' &&
         ['weapon', 'armor', 'equipment', 'consumable', 'backpack', 'loot'].includes(item.type)
       ) {
-        result.quantity = itemSystem?.quantity ?? 1;
+        // A number in dnd5e/pf2e; an object with `value` in other systems
+        const rawQuantity = itemSystem?.quantity;
+        result.quantity =
+          (rawQuantity !== null && typeof rawQuantity === 'object'
+            ? rawQuantity.value
+            : rawQuantity) ?? 1;
         result.equipped = itemSystem?.equipped ?? false;
         result.invested = itemSystem?.equipped?.invested ?? itemSystem?.invested ?? undefined;
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { FoundryClient } from '../foundry-client.js';
 import { Logger } from '../logger.js';
 import { SystemRegistry } from '../systems/system-registry.js';
+import { readItemQuantity } from '../utils/item-quantity.js';
 import {
   detectGameSystem,
   getSystemPaths,
@@ -1397,7 +1398,8 @@ export class CompendiumTools {
     if (system.rarity) properties.rarity = system.rarity;
     if (system.price) properties.price = system.price;
     if (system.weight) properties.weight = system.weight;
-    if (system.quantity) properties.quantity = system.quantity;
+    const quantity = readItemQuantity(system.quantity);
+    if (quantity) properties.quantity = quantity;
 
     // Spell-specific properties
     if (item.type.toLowerCase() === 'spell') {

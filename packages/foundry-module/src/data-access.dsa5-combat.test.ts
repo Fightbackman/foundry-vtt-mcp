@@ -123,6 +123,6 @@ describe('search-character-items with DSA5 items', () => {
 
   it('keeps the generic behaviour for other systems', async () => {
     const result = await search({ type: 'armor' }, 'dnd5e');
-    expect(result.matches[0]).toMatchObject({ quantity: { value: 1 }, equipped: false });
+    expect(result.matches[0]).toMatchObject({ quantity: 1, equipped: false });
   });
 });
