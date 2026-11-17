@@ -39,6 +39,7 @@ import { WFRP4eAddItemsTools } from './tools/wfrp4e/add-items.js';
 import { DSA5JournalTools } from './tools/dsa5/journals.js';
 import { DSA5AdvanceTools } from './tools/dsa5/advance.js';
 import { DSA5AddItemsTools } from './tools/dsa5/add-items.js';
+import { WorldTimeTools } from './tools/world-time.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
@@ -1236,6 +1237,8 @@ async function startBackend(): Promise<void> {
   const dsa5AdvanceTools = new DSA5AdvanceTools({ foundryClient, logger });
   const dsa5AddItemsTools = new DSA5AddItemsTools({ foundryClient, logger });
 
+  const worldTimeTools = new WorldTimeTools({ foundryClient, logger });
+
   // Initialize mapgen-style backend components for map generation
   let mapGenerationJobQueue: any = null;
   let mapGenerationComfyUIClient: any = null;
@@ -1469,6 +1472,7 @@ async function startBackend(): Promise<void> {
     ...dsa5JournalTools.getToolDefinitions(),
     ...dsa5AdvanceTools.getToolDefinitions(),
     ...dsa5AddItemsTools.getToolDefinitions(),
+    ...worldTimeTools.getToolDefinitions(),
 
     ...tokenManipulationTools.getToolDefinitions(),
 
@@ -1643,6 +1647,8 @@ async function startBackend(): Promise<void> {
 
                 case 'dsa5-add-items':
                   result = await dsa5AddItemsTools.handleAddItems(args);
+                case 'world-time':
+                  result = await worldTimeTools.handleWorldTime(args);
 
                   break;
 

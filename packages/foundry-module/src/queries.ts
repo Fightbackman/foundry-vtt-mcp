@@ -3,6 +3,7 @@ import { FoundryDataAccess } from './data-access.js';
 import { ComfyUIManager } from './comfyui-manager.js';
 import { guardQueryHandler } from './query-guard.js';
 import { DSA5JournalAccess } from './dsa5-journals.js';
+import { manageWorldTime } from './world-time.js';
 
 export class QueryHandlers {
   public dataAccess: FoundryDataAccess;
@@ -102,6 +103,9 @@ export class QueryHandlers {
 
     // In-character chat: bubbles, chat-log lines and whispers
     CONFIG.queries[`${modulePrefix}.createChatMessage`] = this.handleCreateChatMessage.bind(this);
+
+    // In-game world time (any system; DSA5 extras)
+    CONFIG.queries[`${modulePrefix}.worldTime`] = this.handleWorldTime.bind(this);
 
     // WFRP4e actor stat-block update
     CONFIG.queries[`${modulePrefix}.updateWfrp4eActor`] = this.handleUpdateWfrp4eActor.bind(this);
@@ -953,6 +957,28 @@ export class QueryHandlers {
     } catch (error) {
       throw new Error(
         `Failed to set actor ownership: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Read, advance or set the in-game world time. GM-only; writes are permission-checked
+   * in world-time.ts.
+   */
+  async handleWorldTime(data: any): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      this.dataAccess.validateFoundryState();
+
+      return await manageWorldTime(data ?? {});
+    } catch (error) {
+      throw new Error(
+        `Failed to manage world time: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
