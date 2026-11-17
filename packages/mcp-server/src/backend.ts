@@ -26,6 +26,7 @@ import { PlaylistTools } from './tools/playlist.js';
 import { ActorCreationTools } from './tools/actor-creation.js';
 import { ActorManagementTools } from './tools/actor-management.js';
 import { EffectManagementTools } from './tools/effect-management.js';
+import { CombatTools } from './tools/combat.js';
 
 import { QuestCreationTools } from './tools/quest-creation.js';
 
@@ -1200,6 +1201,7 @@ async function startBackend(): Promise<void> {
   const actorCreationTools = new ActorCreationTools({ foundryClient, logger });
   const actorManagementTools = new ActorManagementTools({ foundryClient, logger, systemRegistry });
   const effectManagementTools = new EffectManagementTools({ foundryClient, logger });
+  const combatTools = new CombatTools({ foundryClient, logger });
 
   const dsa5CharacterCreator = new DSA5CharacterCreator({ foundryClient, logger });
   const dsa5JsonActorImporter = new DSA5JsonActorImporter({ foundryClient, logger });
@@ -1432,6 +1434,7 @@ async function startBackend(): Promise<void> {
     ...actorCreationTools.getToolDefinitions(),
     ...actorManagementTools.getToolDefinitions(),
     ...effectManagementTools.getToolDefinitions(),
+    ...combatTools.getToolDefinitions(),
 
     ...dsa5CharacterCreator.getToolDefinitions(),
     ...dsa5JsonActorImporter.getToolDefinitions(),
@@ -1621,6 +1624,11 @@ async function startBackend(): Promise<void> {
 
                 case 'manage-effects':
                   result = await effectManagementTools.handleManageEffects(args);
+
+                  break;
+
+                case 'manage-combat':
+                  result = await combatTools.handleManageCombat(args);
 
                   break;
 

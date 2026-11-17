@@ -2,6 +2,7 @@ import { MODULE_ID } from './constants.js';
 import { FoundryDataAccess } from './data-access.js';
 import { ComfyUIManager } from './comfyui-manager.js';
 import { guardQueryHandler } from './query-guard.js';
+import { combatManager, type ManageCombatRequest } from './combat-manager.js';
 
 export class QueryHandlers {
   public dataAccess: FoundryDataAccess;
@@ -144,6 +145,9 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.updateActorItems`] = this.handleUpdateActorItems.bind(this);
     CONFIG.queries[`${modulePrefix}.deleteActorItems`] = this.handleDeleteActorItems.bind(this);
     CONFIG.queries[`${modulePrefix}.manageEffects`] = this.handleManageEffects.bind(this);
+
+    // Encounters (combat tracker)
+    CONFIG.queries[`${modulePrefix}.manageCombat`] = this.handleManageCombat.bind(this);
 
     // Phase 7: Token manipulation queries
     CONFIG.queries[`${modulePrefix}.move-token`] = this.handleMoveToken.bind(this);
@@ -1654,6 +1658,31 @@ export class QueryHandlers {
     } catch (error) {
       throw new Error(
         `Failed to toggle token condition: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Handle manage-combat: encounters, initiative, turns and rounds
+   */
+  private async handleManageCombat(data: ManageCombatRequest): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      this.dataAccess.validateFoundryState();
+
+      if (!data?.action) {
+        throw new Error('action is required');
+      }
+
+      return await combatManager.handle(data);
+    } catch (error) {
+      throw new Error(
+        `Failed to manage combat: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
