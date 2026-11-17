@@ -193,6 +193,120 @@ describe('DSA5Adapter.extractCharacterStats', () => {
   });
 });
 
+describe('DSA5Adapter combat view', () => {
+  // What the bridge computes with the system's sheet code (dsa5Combat)
+  const dsa5Combat = {
+    armor: {
+      protection: 4,
+      worn: [{ id: 'arm1', name: 'Kettenhemd', protection: 4, encumbrance: 2 }],
+    },
+    encumbrance: { level: 2, fromArmor: 2, carriedWeight: 4.5, carryCapacity: 30 },
+    brawling: { attack: 7, parry: 5 },
+    meleeWeapons: [
+      {
+        id: 'sh1',
+        name: 'Holzschild',
+        combatSkill: 'Schilde',
+        attack: 4,
+        parry: 8,
+        damage: '1d6',
+        reach: 'short',
+        shield: true,
+        offHand: true,
+      },
+    ],
+    rangedWeapons: [
+      {
+        id: 'bow1',
+        name: 'Kurzbogen',
+        combatSkill: 'Bögen',
+        attack: 9,
+        damage: '1d6+5',
+        range: '10/50/80',
+        reloadTime: 1,
+        ammunition: { name: 'Kriegspfeile', quantity: 20 },
+      },
+    ],
+    traitAttacks: [],
+    money: {
+      total: 35.79,
+      coins: [
+        { name: 'Dukaten', quantity: 3, value: 10 },
+        { name: 'Kreuzer', quantity: 9, value: 0.01 },
+      ],
+    },
+  };
+  const armed = { ...structuredClone(hero), dsa5Combat };
+
+  it('reports Rüstungsschutz, Belastung, weapons and money from dsa5Combat', () => {
+    const stats = adapter.extractCharacterStats(armed);
+    expect(stats.armor).toBe(4);
+    expect(stats.encumbrance).toBe(2);
+    expect(stats.combat.armor).toEqual(dsa5Combat.armor);
+    expect(stats.combat.encumbrance).toEqual(dsa5Combat.encumbrance);
+    expect(stats.combat.meleeWeapons).toEqual(dsa5Combat.meleeWeapons);
+    expect(stats.combat.rangedWeapons).toEqual(dsa5Combat.rangedWeapons);
+    expect(stats.combat.brawling).toEqual({ attack: 7, parry: 5 });
+    expect(stats.combat.naturalAttacks).toBeUndefined();
+    expect(stats.money).toEqual({
+      total: 35.79,
+      unit: 'Silbertaler',
+      coins: { Dukaten: 3, Kreuzer: 9 },
+    });
+  });
+
+  it("lists a creature's natural attacks", () => {
+    const wolf = {
+      name: 'Wolf',
+      type: 'creature',
+      system: { status: {} },
+      dsa5Combat: {
+        armor: { protection: 2, worn: [] },
+        encumbrance: { level: 0, fromArmor: 0 },
+        meleeWeapons: [],
+        rangedWeapons: [],
+        traitAttacks: [
+          { id: 't1', name: 'Biss', kind: 'melee', attack: 12, damage: '1d6+3', reach: 'short' },
+        ],
+      },
+    };
+    const stats = adapter.extractCharacterStats(wolf);
+    expect(stats.armor).toBe(2);
+    expect(stats.combat.armor).toEqual({ protection: 2 });
+    expect(stats.combat.naturalAttacks).toEqual(wolf.dsa5Combat.traitAttacks);
+    expect(stats.money).toBeUndefined();
+  });
+
+  it('adds Rüstungsschutz and Belastung to basicInfo', () => {
+    expect(adapter.extractBasicInfo(armed)).toMatchObject({ armor: 4, encumbrance: 2 });
+  });
+
+  it('estimates Rüstungsschutz from worn armor when the bridge sends no combat view', () => {
+    const older = structuredClone(hero);
+    older.system.totalArmor = 0;
+    older.items.push(
+      {
+        name: 'Kettenhemd',
+        type: 'armor',
+        system: { worn: { value: true }, protection: { value: 4 } },
+      } as any,
+      {
+        name: 'Leder',
+        type: 'armor',
+        system: { worn: { value: false }, protection: { value: 3 } },
+      } as any,
+      {
+        name: 'Fell',
+        type: 'trait',
+        system: { traitType: { value: 'armor' }, at: { value: '1' } },
+      } as any
+    );
+    const stats = adapter.extractCharacterStats(older);
+    expect(stats.armor).toBe(5);
+    expect(stats.combat).toBeUndefined();
+  });
+});
+
 describe('DSA5Adapter.extractBasicInfo', () => {
   it('summarises pools, Erfahrungsgrad and identity', () => {
     expect(adapter.extractBasicInfo(hero)).toEqual({

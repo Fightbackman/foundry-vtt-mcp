@@ -1,6 +1,8 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
 import { permissionManager } from './permissions.js';
 import { transactionManager } from './transaction-manager.js';
+import { buildDSA5CombatSummary, type DSA5CombatSummary } from './dsa5-combat.js';
+import { dsa5EquipmentFields } from './dsa5-items.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -33,6 +35,7 @@ interface CharacterInfo {
   itemVariants?: any[]; // Item rule element variants (ChoiceSet, etc.)
   itemToggles?: any[]; // Item rule element toggles (RollOption, ToggleProperty, equipped)
   spellcasting?: SpellcastingEntry[]; // PF2e/D&D 5e spellcasting entries
+  dsa5Combat?: DSA5CombatSummary; // DSA5: armor, Belastung, weapons and money as the sheet computes them
 }
 
 interface SpellcastingEntry {
@@ -1951,6 +1954,12 @@ export class FoundryDataAccess {
       characterData.spellcasting = spellcastingEntries;
     }
 
+    // DSA5 derives armor, Belastung and weapon values at render time; send what the sheet shows.
+    if ((game.system as any).id === 'dsa5') {
+      const combat = buildDSA5CombatSummary(actor);
+      if (combat) characterData.dsa5Combat = combat;
+    }
+
     return characterData;
   }
 
@@ -2107,8 +2116,11 @@ export class FoundryDataAccess {
         }
       }
 
-      // Equipment-specific fields
-      if (['weapon', 'armor', 'equipment', 'consumable', 'backpack', 'loot'].includes(item.type)) {
+      // Equipment-specific fields (DSA5 stores them differently, handled below)
+      if (
+        systemId !== 'dsa5' &&
+        ['weapon', 'armor', 'equipment', 'consumable', 'backpack', 'loot'].includes(item.type)
+      ) {
         result.quantity = itemSystem?.quantity ?? 1;
         result.equipped = itemSystem?.equipped ?? false;
         result.invested = itemSystem?.equipped?.invested ?? itemSystem?.invested ?? undefined;
@@ -2129,6 +2141,14 @@ export class FoundryDataAccess {
         result.equipped = itemSystem?.equipped?.value ?? item.isEquipped ?? false;
 
         if (searchCategory === 'equipped' && !result.equipped) continue;
+      }
+
+      // DSA5 equipment: quantity.value, worn.value instead of equipped
+      if (systemId === 'dsa5') {
+        const fields = dsa5EquipmentFields(item);
+        if (fields) Object.assign(result, fields);
+        // Only worn items, not Talente, spells or other items that cannot be worn
+        if (searchCategory === 'equipped' && !fields?.equipped) continue;
       }
 
       // WFRP4e prayer targeting (divine magic; item type 'prayer')
@@ -2188,8 +2208,9 @@ export class FoundryDataAccess {
       }
     }
 
-    // Search effects if type filter includes 'effect' or is empty
-    if (!searchType || searchType === 'effect') {
+    // Search effects if type filter includes 'effect' or is empty (DSA5 "equipped" lists worn items only)
+    const dsa5WornOnly = systemId === 'dsa5' && searchCategory === 'equipped';
+    if ((!searchType || searchType === 'effect') && !dsa5WornOnly) {
       const effects = actor.effects || [];
       for (const effect of effects) {
         if (matches.length >= limit) break;

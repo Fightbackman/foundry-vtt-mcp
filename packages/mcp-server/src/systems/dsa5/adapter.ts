@@ -23,6 +23,7 @@ import {
   EIGENSCHAFT_NAMES,
   SIZE_CATEGORY_ALIASES,
 } from './constants.js';
+import { formatDSA5Combat, estimateDSA5Armor } from './combat.js';
 
 /**
  * DSA5 system adapter
@@ -364,9 +365,18 @@ export class DSA5Adapter implements SystemAdapter {
       if (value !== undefined) stats[key] = value;
     }
 
-    // Rüstungsschutz is derived from worn armor
-    if (typeof system.totalArmor === 'number' && system.totalArmor > 0) {
-      stats.armor = system.totalArmor;
+    // Rüstungsschutz, Belastung, weapons and money are derived at render time; the bridge
+    // computes them with the system's sheet code (`dsa5Combat`). `system.totalArmor` alone
+    // is only the bonus from effects.
+    const combat = formatDSA5Combat(actorData.dsa5Combat);
+    if (combat) {
+      stats.armor = combat.armor;
+      if (combat.encumbrance !== undefined) stats.encumbrance = combat.encumbrance;
+      stats.combat = combat.combat;
+      if (combat.money) stats.money = combat.money;
+    } else {
+      const armor = estimateDSA5Armor(actorData);
+      if (armor > 0) stats.armor = armor;
     }
 
     // Identity info
@@ -464,6 +474,13 @@ export class DSA5Adapter implements SystemAdapter {
       };
     }
 
+    // Rüstungsschutz and Belastung (stats.combat has the details)
+    const combat = formatDSA5Combat(actorData.dsa5Combat);
+    if (combat) {
+      basicInfo.armor = combat.armor;
+      if (combat.encumbrance !== undefined) basicInfo.encumbrance = combat.encumbrance;
+    }
+
     if (system.details?.experience && actorData.type !== 'creature') {
       const experience = DSA5Adapter.experience(system);
       basicInfo.experienceLevel = experience.levelName;
@@ -521,7 +538,8 @@ export class DSA5Adapter implements SystemAdapter {
       '  modifier on create, and on update when GE is in the same payload.',
       '  soulpower / toughness → status.<key>.value for creatures; derived for character/npc, where only',
       '  status.<key>.initial or .modifier have an effect.',
-      '  Rüstungsschutz is derived from equipped armor items; there is no armor field on the actor.',
+      '  Rüstungsschutz and Belastung are derived from worn armor items (system.worn.value, protection,',
+      '  encumbrance); there is no armor field on the actor (system.totalArmor is only the effect bonus).',
       '  tradition → system.tradition {magical, clerical}; guidevalue {magical, clerical} names the',
       '  Leiteigenschaft (mu…kk) that AsP/KaP are computed from.',
       '',
