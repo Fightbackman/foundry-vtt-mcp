@@ -36,6 +36,7 @@ import { CampaignManagementTools } from './tools/campaign-management.js';
 import { OwnershipTools } from './tools/ownership.js';
 import { WFRP4eUpdateActorTools } from './tools/wfrp4e/update-actor.js';
 import { WFRP4eAddItemsTools } from './tools/wfrp4e/add-items.js';
+import { DSA5AddItemsTools } from './tools/dsa5/add-items.js';
 
 import { MapGenerationTools } from './tools/map-generation.js';
 
@@ -1225,6 +1226,7 @@ async function startBackend(): Promise<void> {
 
   const wfrp4eUpdateActorTools = new WFRP4eUpdateActorTools({ foundryClient, logger });
   const wfrp4eAddItemsTools = new WFRP4eAddItemsTools({ foundryClient, logger });
+  const dsa5AddItemsTools = new DSA5AddItemsTools({ foundryClient, logger });
 
   // Initialize mapgen-style backend components for map generation
   let mapGenerationJobQueue: any = null;
@@ -1454,6 +1456,8 @@ async function startBackend(): Promise<void> {
 
     ...wfrp4eAddItemsTools.getToolDefinitions(),
 
+    ...dsa5AddItemsTools.getToolDefinitions(),
+
     ...tokenManipulationTools.getToolDefinitions(),
 
     ...mapGenerationTools.getToolDefinitions(),
@@ -1609,6 +1613,11 @@ async function startBackend(): Promise<void> {
 
                 case 'wfrp4e-add-items':
                   result = await wfrp4eAddItemsTools.handleAddItems(args);
+
+                  break;
+
+                case 'dsa5-add-items':
+                  result = await dsa5AddItemsTools.handleAddItems(args);
 
                   break;
 

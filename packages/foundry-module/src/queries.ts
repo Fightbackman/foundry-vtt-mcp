@@ -102,6 +102,9 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.updateWfrp4eActor`] = this.handleUpdateWfrp4eActor.bind(this);
     CONFIG.queries[`${modulePrefix}.addWfrp4eItems`] = this.handleAddWfrp4eItems.bind(this);
 
+    // DSA5: add/remove items the way the character sheet does
+    CONFIG.queries[`${modulePrefix}.dsa5AddItems`] = this.handleDsa5AddItems.bind(this);
+
     // Token manipulation queries
     CONFIG.queries[`${modulePrefix}.moveToken`] = this.handleMoveToken.bind(this);
     CONFIG.queries[`${modulePrefix}.updateToken`] = this.handleUpdateToken.bind(this);
@@ -943,6 +946,27 @@ export class QueryHandlers {
     } catch (error) {
       throw new Error(
         `Failed to add WFRP4e items: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  async handleDsa5AddItems(data: any): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      this.dataAccess.validateFoundryState();
+
+      if (!data.actor) {
+        throw new Error('actor (name or id) is required');
+      }
+      return await this.dataAccess.dsa5AddItems(data);
+    } catch (error) {
+      throw new Error(
+        `Failed to change DSA5 items: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }

@@ -49,6 +49,13 @@ export class PermissionManager {
       settingKey: 'allowWriteOperations',
       requiresGM: false,
     },
+    modifyActorItems: {
+      name: 'Modify Actor Items',
+      level: PERMISSION_LEVELS.LOW_RISK,
+      description: 'Add items to or remove items from actors through the game system',
+      settingKey: 'allowWriteOperations',
+      requiresGM: false,
+    },
     bulkOperations: {
       name: 'Bulk Operations',
       level: PERMISSION_LEVELS.MEDIUM_RISK,

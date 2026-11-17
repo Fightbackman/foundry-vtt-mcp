@@ -1,6 +1,7 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
 import { permissionManager } from './permissions.js';
 import { transactionManager } from './transaction-manager.js';
+import { dsa5AddItems, type Dsa5AddItemsRequest } from './dsa5-add-items.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -7059,6 +7060,42 @@ export class FoundryDataAccess {
       newCharacteristicTotals: newTotals,
       ...(warnings.length ? { warnings } : {}),
     };
+  }
+
+  /**
+   * DSA5: add items to an actor the way dropping them on the sheet does (AP cost, adoption,
+   * stacking, money, item packages, AP tracker), or remove them with the sheet's AP refund.
+   * See dsa5-add-items.ts.
+   */
+  async dsa5AddItems(data: Dsa5AddItemsRequest & { actor: string }): Promise<any> {
+    this.validateFoundryState();
+    const systemId = (game.system as any).id;
+    if (systemId !== 'dsa5') {
+      return {
+        success: false,
+        error: `dsa5-add-items requires the DSA5 system (current: "${systemId}")`,
+      };
+    }
+    const permissionCheck = permissionManager.checkWritePermission('modifyActorItems');
+    if (!permissionCheck.allowed) {
+      throw new Error(`${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`);
+    }
+    permissionManager.auditPermissionCheck('modifyActorItems', permissionCheck, data);
+
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      return { success: false, error: 'items must contain at least one entry' };
+    }
+    const actor = this.findActorByIdentifier(data.actor);
+    if (!actor) return { success: false, error: `Actor not found: ${data.actor}` };
+
+    const result = await dsa5AddItems(actor, data);
+    this.auditLog(
+      'dsa5AddItems',
+      { actor: actor.name, action: data.action ?? 'add', count: data.items.length },
+      result.success ? 'success' : 'failure',
+      result.success ? undefined : result.summary
+    );
+    return result;
   }
 
   /**
