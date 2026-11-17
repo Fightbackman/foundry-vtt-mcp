@@ -1,3 +1,11 @@
+## Unreleased
+
+### New Features
+
+- **`dsa5-money`** — read a hero's purse per coin (Dukaten, Silbertaler, Heller, Kreuzer) with the total in Silbertaler, for single actors or the whole party, and pay, receive or transfer money through the system's own payment functions, so change-making across coins, the affordability check, the optional chat message and the money tracker journal entry are exactly the system's. Amounts can be given in Silbertaler, per coin, or as the system's own number/dice formula. A payment for several actors or the party is all-or-nothing: if anyone cannot afford it, nothing is written and the result says what is missing. Actors without coin items get the standard coins before receiving, where the system itself would throw. Needs Allow Write Operations for changes. DSA5 worlds only.
+
+- **`dsa5-party`** — the party as the system defines it (the primary party group actor, else the GM menu's heroes, else all player-owned actors): one line per member with LeP, AsP/KaP, Schicksalspunkte, money and conditions, the group actor's purse and depots, and the group Schicksalspunkte. Use, restore or set the group's or a hero's Schicksalspunkte, add or remove party members through the group actor's own API or the GM menu's hero list, and choose the primary party. Needs Allow Write Operations for changes. DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features

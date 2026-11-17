@@ -157,6 +157,19 @@ const builder = new DSA5IndexBuilder();
 const index = await builder.buildIndex(packs, force);
 ```
 
+## Money and Party (`dsa5-money`, `dsa5-party`)
+
+Browser side: `packages/foundry-module/src/dsa5-money-party.ts`; tools: `packages/mcp-server/src/tools/dsa5/money-party.ts`.
+
+- **Money** is the actor's `money` items (`system.price.value` in Silbertaler, count in `system.quantity.value`; items with `subcategory` 1 are not counted, like `DSA5Payment._actorsMoney`). `pay`/`receive`/`transfer` call `game.dsa5.apps.DSA5Payment.executePayment` with the options the system uses when the GM executes a payment request (`track: true`, no dice animation), so change-making, chat text and the money tracker entry are the system's. The system rewrites the whole purse after every payment (receiving 1 S with 9 Silber in the purse leaves 1 Dukat and 0 Silber).
+- **Amounts**: a number in Silbertaler, `{dukaten, silbertaler, heller, kreuzer}`, or a string in the system's own format — a number or Foundry roll formula in Silbertaler (`"12,5"`, `"2d6"`, `"1W6*10"`); dice are rolled per actor like the system's group payment request. Coin abbreviations such as `"5 D 3 S"` are not a system format and are refused.
+- **Several actors / party**: everyone pays or receives the full amount, like the GM menu and group sheet payment dialogs (no splitting). All payers are checked with `DSA5Payment.canPay` first; one refusal means nothing is written.
+- **No coin items**: the system's `executePayment` throws when receiving money on an actor without coins (`_moneyToCoins` with an empty currency list). The tool first adds the standard coins from `DSA5_Utility.allMoneyItems()` (what the system adds to new actors) and reports `coinsCreated`. Paying from such an actor is refused as unaffordable.
+- **Money tracker**: written by the system only when the world setting `enableMoneyTracking` is on and the actor has a player owner; the result reports `recorded`, `disabled` or `skipped` per actor.
+- **Known system quirk**: change-making runs in floating point, so e.g. paying 3 Heller from 1 Dukat leaves 9 Silber 6 Heller 10 Kreuzer, exactly as the system's own `payMoney` does.
+- **Party** = `ActorPickerDialog` `#getTrackedActors`: members of the primary party group actor (setting `primaryParty`), else the GM menu's `trackedActors`, else all player-owned actors. Membership changes use `GroupData.addMember`/`removeMember` on the group actor, or the GM menu's `setTrackedHeros` (an empty list first becomes the player-owned actors, as the GM menu does when it renders). `set-primary` writes `primaryParty` like the group sheet toggle.
+- **Schicksalspunkte**: group pool in the world setting `groupschips` (`"current/max"`; the GM menu re-renders on change; `set` caps current at max like `changeGroupSchipCount`). Hero: `system.status.fatePoints.value` (the field the sheet pips write), between 0 and the derived `fatePoints.max`; the hero maximum is not changed here. The system posts no chat message for either.
+
 ## Integration Points
 
 The DSA5 adapter is registered in two places:

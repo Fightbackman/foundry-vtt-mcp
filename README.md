@@ -183,6 +183,8 @@ Once connected, ask Claude Desktop:
 - **48** manage-actors (create / update / delete / place actors; update / delete embedded items — any system)
 - **49** wfrp4e-update-actor (WFRP4e Only)
 - **50** wfrp4e-add-items (WFRP4e Only)
+- **51** dsa5-money (get / pay / receive / transfer money through the system's payment rules — DSA5 Only)
+- **52** dsa5-party (party members, group and hero Schicksalspunkte, party membership — DSA5 Only)
 
 ## Settings
 
