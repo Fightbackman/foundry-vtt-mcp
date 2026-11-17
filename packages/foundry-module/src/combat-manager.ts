@@ -21,7 +21,7 @@ import {
   dsa5ForgetInitiativeDie,
   dsa5Snapshot,
   isDsa5,
-} from './dsa5-combat.js';
+} from './dsa5-encounter.js';
 
 export type CombatAction =
   | 'state'

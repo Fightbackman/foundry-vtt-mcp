@@ -159,7 +159,7 @@ const index = await builder.buildIndex(packs, force);
 
 ## Encounters (`manage-combat`)
 
-`manage-combat` is a generic tool; in DSA5 worlds it goes through the system's own `DSA5Combat` / `DSA5Combatant` overrides and adds DSA5 data (module side: `packages/foundry-module/src/combat-manager.ts`, DSA5 parts in `dsa5-combat.ts`).
+`manage-combat` is a generic tool; in DSA5 worlds it goes through the system's own `DSA5Combat` / `DSA5Combatant` overrides and adds DSA5 data (module side: `packages/foundry-module/src/combat-manager.ts`, DSA5 parts in `dsa5-encounter.ts`).
 
 - **Initiative** is rolled with the system formula (`INI + 1d6 + 1d99 * 0.00001`, INI carrying `0.01 * INI` as a tie-breaker). The system records the die as `flags.dsa5.baseRoll` only when the flag is missing, so the tool drops it before a reroll or a value set by hand; otherwise `recalcInitiative` would later restore the old value.
 - **State** per combatant: LeP, conditions with levels, other temporary effects, INI base and die, `defenseCount` with the penalty for the next parry/dodge (`RuleChaos.multipleDefenseValue`, without scoped effect overrides from the defense dialog), actions used / per round, free action used, waiting.
