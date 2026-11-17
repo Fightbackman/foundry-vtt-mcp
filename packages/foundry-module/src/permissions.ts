@@ -49,6 +49,13 @@ export class PermissionManager {
       settingKey: 'allowWriteOperations',
       requiresGM: false,
     },
+    advanceCharacter: {
+      name: 'Advance Character',
+      level: PERMISSION_LEVELS.LOW_RISK,
+      description: 'Spend, refund or award adventure points (DSA5 advancement)',
+      settingKey: 'allowWriteOperations',
+      requiresGM: false,
+    },
     bulkOperations: {
       name: 'Bulk Operations',
       level: PERMISSION_LEVELS.MEDIUM_RISK,

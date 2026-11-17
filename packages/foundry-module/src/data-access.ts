@@ -1,6 +1,12 @@
 import { MODULE_ID, ERROR_MESSAGES, TOKEN_DISPOSITIONS } from './constants.js';
 import { permissionManager } from './permissions.js';
 import { transactionManager } from './transaction-manager.js';
+import {
+  dsa5Advance,
+  dsa5AwardAP,
+  dsa5PartyActors,
+  type Dsa5AdvanceRequest,
+} from './dsa5-advancement.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -7059,6 +7065,98 @@ export class FoundryDataAccess {
       newCharacteristicTotals: newTotals,
       ...(warnings.length ? { warnings } : {}),
     };
+  }
+
+  /**
+   * DSA5: raise, lower or preview a value with Abenteuerpunkte through the system's own
+   * advancement methods (see dsa5-advancement.ts). Preview writes nothing and needs no
+   * write permission.
+   */
+  async dsa5Advance(data: Dsa5AdvanceRequest & { actor: string }): Promise<any> {
+    this.validateFoundryState();
+    const systemId = (game.system as any).id;
+    if (systemId !== 'dsa5') {
+      return {
+        success: false,
+        error: `dsa5-advance requires the DSA5 system (current: "${systemId}")`,
+      };
+    }
+    if (data.action !== 'preview') {
+      const permissionCheck = permissionManager.checkWritePermission('advanceCharacter');
+      if (!permissionCheck.allowed) {
+        throw new Error(`${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`);
+      }
+      permissionManager.auditPermissionCheck('advanceCharacter', permissionCheck, data);
+    }
+    const actor = this.findActorByIdentifier(data.actor);
+    if (!actor) return { success: false, error: `Actor not found: ${data.actor}` };
+
+    const result = await dsa5Advance(actor, data);
+    if (data.action !== 'preview') {
+      this.auditLog(
+        'dsa5Advance',
+        { actor: actor.name, target: data.target, action: data.action },
+        result.success ? 'success' : 'failure',
+        result.error
+      );
+    }
+    return result;
+  }
+
+  /**
+   * DSA5: award AP the way the system's GM menu does (familiar/pet shares, AP tracker via
+   * the actor's own update hook). `party` uses the GM menu's default actor list.
+   */
+  async dsa5AwardAP(data: {
+    actors?: string[];
+    party?: boolean;
+    amount: number;
+    reason?: string;
+    postToChat?: boolean;
+  }): Promise<any> {
+    this.validateFoundryState();
+    const systemId = (game.system as any).id;
+    if (systemId !== 'dsa5') {
+      return {
+        success: false,
+        error: `dsa5-advance requires the DSA5 system (current: "${systemId}")`,
+      };
+    }
+    const permissionCheck = permissionManager.checkWritePermission('advanceCharacter');
+    if (!permissionCheck.allowed) {
+      throw new Error(`${ERROR_MESSAGES.ACCESS_DENIED}: ${permissionCheck.reason}`);
+    }
+    permissionManager.auditPermissionCheck('advanceCharacter', permissionCheck, data);
+
+    const actors: any[] = [];
+    const notFound: string[] = [];
+    for (const identifier of data.actors ?? []) {
+      const actor = this.findActorByIdentifier(identifier);
+      if (actor) actors.push(actor);
+      else notFound.push(identifier);
+    }
+    if (notFound.length) {
+      return { success: false, error: `Actor(s) not found: ${notFound.join(', ')}` };
+    }
+    if (data.party) actors.push(...dsa5PartyActors());
+    const unique = actors.filter((a, i) => actors.findIndex(b => b.id === a.id) === i);
+    if (unique.length === 0) {
+      return {
+        success: false,
+        error: data.party
+          ? 'The party is empty: no primary party, no GM-menu tracked actors and no player-owned actors'
+          : 'No actors given',
+      };
+    }
+
+    const result = await dsa5AwardAP(unique, data);
+    this.auditLog(
+      'dsa5AwardAP',
+      { actors: unique.map(a => a.name), amount: data.amount },
+      result.success ? 'success' : 'failure',
+      result.error
+    );
+    return result;
   }
 
   /**
