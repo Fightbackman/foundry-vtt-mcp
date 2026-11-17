@@ -1,3 +1,9 @@
+## Unreleased
+
+### New Features
+
+- **`manage-combat`** — run an encounter from the combat tracker: create it on the current or a named scene from token ids, token names or all hostile and friendly tokens, add late arrivals, roll initiative through the game system's own formula (everyone, NPCs, those without a value, or named combatants; optionally as GM-only rolls) or set a value by hand, start it, step through turns and rounds, mark combatants defeated or hidden, remove them, and end the encounter. Every change goes through Foundry's Combat methods, so the system's own turn rules apply, and each turn change reports who is up, who was skipped and what changed on the combatants meanwhile (damage, effects that ran out, chat cards). Tokens that are missing or already in the encounter are reported one by one, several encounters on one scene are told apart by name or id, and everything except reading the state needs Allow Write Operations. In DSA5 worlds each combatant also shows LeP, conditions with their levels, defenses made this round with the resulting penalty, and actions used; the extras are DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
