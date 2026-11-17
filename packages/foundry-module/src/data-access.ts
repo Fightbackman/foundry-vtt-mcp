@@ -21,6 +21,7 @@ import {
   type Dsa5CheckType,
   type Dsa5MessageMode,
 } from './dsa5-rolls.js';
+import { createDsa5Actor, createDsa5Actors } from './dsa5-actor-create.js';
 
 // The same five characters foundry.utils.escapeHTML replaces in v14, kept local because
 // that helper isn't confirmed in v13, this module's minimum.
@@ -5057,6 +5058,8 @@ export class FoundryDataAccess {
     updateExisting?: boolean;
     existingActorIdentifier?: string;
     preserveItemTypes?: string[];
+    /** DSA5 only: build a new actor like the system's own create (default items, LeP). */
+    applySystemDefaults?: boolean;
     placement?: {
       type: 'random' | 'grid' | 'center' | 'coordinates';
       coordinates?: { x: number; y: number }[];
@@ -5197,6 +5200,17 @@ export class FoundryDataAccess {
           await existingActor.createEmbeddedDocuments('ActiveEffect', effectsToCreate);
         }
         resultActor = existingActor;
+      } else if (request.applySystemDefaults && (game as any).system?.id === 'dsa5') {
+        // Actors mapped from a foreign export are built from scratch, so they need
+        // the defaults Actordsa5.create adds (skills, combat skills, coins, LeP);
+        // the core Actor.create never calls that override.
+        resultActor = await createDsa5Actor(
+          actorData,
+          Array.isArray(incomingItems) ? incomingItems : []
+        );
+        if (Array.isArray(incomingEffects) && incomingEffects.length > 0) {
+          await resultActor.createEmbeddedDocuments('ActiveEffect', incomingEffects);
+        }
       } else {
         resultActor = await Actor.create(actorData as any);
         if (!resultActor) {
@@ -11532,6 +11546,7 @@ export class FoundryDataAccess {
       type: string;
       img?: string;
       system?: Record<string, any>;
+      items?: Array<Record<string, any>>;
     }>;
     folder?: string;
   }): Promise<{ created: Array<{ id: string; name: string; type: string }>; total: number }> {
@@ -11685,7 +11700,14 @@ export class FoundryDataAccess {
       return doc;
     });
 
-    const created = await Actor.createDocuments(docs as any[]);
+    // DSA5 adds its default items, fate points and LeP in Actordsa5.create, which the
+    // core Actor.createDocuments never calls; go through the system's path instead.
+    const created =
+      gameSystemId === 'dsa5'
+        ? await createDsa5Actors(
+            docs.map((doc, i) => ({ data: doc as any, items: params.actors[i].items ?? [] }))
+          )
+        : await Actor.createDocuments(docs as any[]);
     if (!created || created.length === 0) {
       throw new Error('Foundry failed to create actor documents');
     }

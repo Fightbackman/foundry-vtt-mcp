@@ -1212,6 +1212,7 @@ export class QueryHandlers {
     updateExisting?: boolean;
     existingActorIdentifier?: string;
     preserveItemTypes?: string[];
+    applySystemDefaults?: boolean;
     placement?: {
       type: 'random' | 'grid' | 'center' | 'coordinates';
       coordinates?: { x: number; y: number }[];
@@ -1236,6 +1237,7 @@ export class QueryHandlers {
         updateExisting?: boolean;
         existingActorIdentifier?: string;
         preserveItemTypes?: string[];
+        applySystemDefaults?: boolean;
         placement?: {
           type: 'random' | 'grid' | 'center' | 'coordinates';
           coordinates?: { x: number; y: number }[];
@@ -1253,6 +1255,9 @@ export class QueryHandlers {
       }
       if (data.placement) {
         requestData.placement = data.placement;
+      }
+      if (data.applySystemDefaults === true) {
+        requestData.applySystemDefaults = true;
       }
 
       return await this.dataAccess.createActorFromData(requestData);
@@ -2298,6 +2303,7 @@ export class QueryHandlers {
       type: string;
       img?: string;
       system?: Record<string, any>;
+      items?: Array<Record<string, any>>;
     }>;
     folder?: string;
   }): Promise<any> {

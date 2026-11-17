@@ -1,8 +1,9 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  DSA5JsonActorImporter,
   applyResolvedItemOverrides,
   detectDSA5ImportFormat,
   extractPayload,
@@ -253,5 +254,51 @@ describe('extractPayload file paths', () => {
     await expect(extractPayload('{not valid JSON', undefined)).rejects.toThrow(
       'Payload is not valid JSON.'
     );
+  });
+});
+
+describe('import-dsa5-actor-from-json system defaults', () => {
+  function makeImporter() {
+    const query = vi.fn(async (method: string) => {
+      if (method === 'foundry-mcp-bridge.getWorldInfo') return { system: 'dsa5' };
+      if (method === 'foundry-mcp-bridge.createActorFromData') {
+        return { success: true, actor: { id: 'a1', name: 'Hero', type: 'character' } };
+      }
+      return null;
+    });
+    const logger: any = { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    logger.child = () => logger;
+    const importer = new DSA5JsonActorImporter({ foundryClient: { query } as any, logger });
+    const createCall = () =>
+      query.mock.calls.find(([method]) => method === 'foundry-mcp-bridge.createActorFromData')?.[1];
+    return { importer, createCall };
+  }
+
+  // A mapped hero is built from scratch and needs the defaults DSA5 gives new actors.
+  it('asks for DSA5 creation defaults for mapped formats', async () => {
+    const { importer, createCall } = makeImporter();
+    await importer.handleImportActorFromJson({
+      jsonPayload: {
+        name: 'Hero',
+        r: 'x',
+        c: 'y',
+        p: 'z',
+        attr: { values: [{ id: 'ATTR_1', value: 12 }] },
+      },
+      resolveItems: false,
+      updateExisting: false,
+    });
+    expect(createCall()).toMatchObject({ applySystemDefaults: true });
+  });
+
+  it('takes a raw Foundry export as-is', async () => {
+    const { importer, createCall } = makeImporter();
+    await importer.handleImportActorFromJson({
+      jsonPayload: { name: 'Hero', type: 'character', system: {}, items: [] },
+      strategy: 'raw_foundry',
+      resolveItems: false,
+      updateExisting: false,
+    });
+    expect(createCall()).not.toHaveProperty('applySystemDefaults');
   });
 });

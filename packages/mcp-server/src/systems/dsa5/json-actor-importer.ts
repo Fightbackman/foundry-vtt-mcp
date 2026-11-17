@@ -1244,6 +1244,10 @@ export class DSA5JsonActorImporter {
           existingActorIdentifier:
             existingActorIdentifier ?? String(mappingResult.actorData.name ?? ''),
           ...(updateExisting ? { preserveItemTypes: ['species', 'culture', 'career'] } : {}),
+          // Mapped formats describe a hero from scratch, so a new actor needs the
+          // defaults DSA5 gives every new actor (all skills, coins, full LeP). A raw
+          // Foundry export is taken as-is, like Foundry's own JSON import.
+          ...(selectedFormat !== 'raw_foundry' ? { applySystemDefaults: true } : {}),
         }
       );
 

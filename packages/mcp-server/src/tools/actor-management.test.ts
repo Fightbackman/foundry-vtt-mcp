@@ -113,3 +113,25 @@ describe('manage-actors update-items action', () => {
     expect(query).not.toHaveBeenCalled();
   });
 });
+
+describe('manage-actors create action', () => {
+  it('forwards embedded items alongside system data', async () => {
+    const { tools, query } = makeTools();
+    const items = [{ name: 'Klettern', type: 'skill', system: { talentValue: { value: 7 } } }];
+    await tools.handleManageActors({
+      action: 'create',
+      actors: [{ name: 'Held', type: 'character', items }],
+      folder: 'Heroes',
+    });
+    expect(query).toHaveBeenCalledWith('foundry-mcp-bridge.createActors', {
+      actors: [{ name: 'Held', type: 'character', items }],
+      folder: 'Heroes',
+    });
+  });
+
+  it('advertises items on actor definitions', () => {
+    const { tools } = makeTools();
+    const actorProps = tools.getToolDefinitions()[0].inputSchema.properties.actors.items.properties;
+    expect(actorProps.items.type).toBe('array');
+  });
+});
