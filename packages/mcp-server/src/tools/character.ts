@@ -4,6 +4,7 @@ import { Logger } from '../logger.js';
 import { SystemRegistry } from '../systems/system-registry.js';
 import { detectGameSystem, getCachedSystemId, type GameSystem } from '../utils/system-detection.js';
 import type { SystemAdapter } from '../systems/types.js';
+import { readItemQuantity } from '../utils/item-quantity.js';
 
 export interface CharacterToolsOptions {
   foundryClient: FoundryClient;
@@ -372,7 +373,7 @@ export class CharacterTools {
           level: entity.system?.level?.value ?? entity.system?.level,
           actionType: entity.system?.actionType?.value,
           actions: entity.system?.actions?.value,
-          quantity: entity.system?.quantity || 1,
+          quantity: readItemQuantity(entity.system?.quantity) ?? 1,
           equipped: entity.system?.equipped,
           attunement: entity.system?.attunement,
           hasImage: !!entity.img,
@@ -1080,8 +1081,9 @@ export class CharacterTools {
       };
 
       // Include quantity if present
-      if (item.system?.quantity !== undefined && item.system.quantity !== 1) {
-        formattedItem.quantity = item.system.quantity;
+      const quantity = readItemQuantity(item.system?.quantity);
+      if (quantity !== undefined && quantity !== 1) {
+        formattedItem.quantity = quantity;
       }
 
       // Include traits for PF2e items (feats, equipment, spells, etc.)

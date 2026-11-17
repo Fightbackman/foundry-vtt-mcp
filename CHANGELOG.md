@@ -1,3 +1,9 @@
+## Unreleased
+
+### Fixes
+
+- **Item quantities shown as `{ value: 1 }`** — systems that store an item's quantity as an object (DSA5, WFRP4e: `system.quantity.value`) leaked that raw object into `get-character` item lists, `get-character-entity` and compendium item properties, and in DSA5 also into `search-character-items` for armor, equipment and consumables. These now show the plain number; dnd5e and PF2e, which store a number, are unchanged.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
