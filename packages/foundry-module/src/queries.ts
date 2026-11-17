@@ -80,6 +80,7 @@ export class QueryHandlers {
     CONFIG.queries[`${modulePrefix}.request-player-rolls`] =
       this.handleRequestPlayerRolls.bind(this);
     CONFIG.queries[`${modulePrefix}.dsa5RollCheck`] = this.handleDsa5RollCheck.bind(this);
+    CONFIG.queries[`${modulePrefix}.dsa5ApplyDamage`] = this.handleDsa5ApplyDamage.bind(this);
 
     // Enhanced creature index for campaign analysis
     CONFIG.queries[`${modulePrefix}.getEnhancedCreatureIndex`] =
@@ -841,6 +842,31 @@ export class QueryHandlers {
     } catch (error) {
       throw new Error(
         `Failed to roll DSA5 check: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Apply DSA5 damage, healing, regeneration or AsP/KaP changes (dsa5-apply-damage). GM-only.
+   */
+  async handleDsa5ApplyDamage(data: any): Promise<any> {
+    try {
+      // SECURITY: Silent GM validation
+      const gmCheck = this.validateGMAccess();
+      if (!gmCheck.allowed) {
+        return { error: 'Access denied', success: false };
+      }
+
+      this.dataAccess.validateFoundryState();
+
+      if (!data?.action) {
+        throw new Error('action is required');
+      }
+
+      return await this.dataAccess.applyDsa5Damage(data);
+    } catch (error) {
+      throw new Error(
+        `Failed to apply DSA5 damage: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }

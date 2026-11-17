@@ -255,6 +255,37 @@ describe('rollDsa5Check', () => {
     });
   });
 
+  it('reports the opposed result a defense resolved, for the damage follow-up', async () => {
+    const cards: Record<string, any> = {
+      'msg-1': {
+        id: 'msg-1',
+        flags: { data: { attackerMessage: 'attack-1' }, dsa5: { opposedResultMessageId: 'res-1' } },
+      },
+      'res-1': {
+        id: 'res-1',
+        flags: {
+          opposeData: {
+            winner: 'attacker',
+            speakerAttack: { alias: 'Alrike' },
+            speakerDefend: { alias: 'Wolf', token: 'tok-w' },
+            damage: { value: 5, sp: 5 },
+          },
+        },
+      },
+    };
+    stubGame({ messages: { get: (id: string) => cards[id] } });
+    const result = await rollDsa5Check(makeActor(), { check: 'dodge' });
+    expect(result.roll?.opposed).toEqual([
+      expect.objectContaining({
+        role: 'defender',
+        status: 'resolved',
+        resultMessageId: 'res-1',
+        winnerName: 'Alrike',
+        damage: { rolled: 5, armor: 0, afterArmor: 5 },
+      }),
+    ]);
+  });
+
   it('passes the message mode to the system', async () => {
     const actor = makeActor();
     await rollDsa5Check(actor, { check: 'attribute', name: 'KK', messageMode: 'gm' });

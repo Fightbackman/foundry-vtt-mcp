@@ -45,6 +45,7 @@ import { TokenManipulationTools } from './tools/token-manipulation.js';
 import { DSA5CharacterCreator } from './systems/dsa5/character-creator.js';
 import { DSA5JsonActorImporter } from './systems/dsa5/json-actor-importer.js';
 import { DSA5RollCheckTools } from './tools/dsa5/roll-check.js';
+import { DSA5ApplyDamageTools } from './tools/dsa5/apply-damage.js';
 
 import { DnD5eAddFeatureTool } from './tools/dnd5e/add-feature.js';
 import { DnD5eNpcTools } from './tools/dnd5e/npc.js';
@@ -1206,6 +1207,7 @@ async function startBackend(): Promise<void> {
   const dsa5CharacterCreator = new DSA5CharacterCreator({ foundryClient, logger });
   const dsa5JsonActorImporter = new DSA5JsonActorImporter({ foundryClient, logger });
   const dsa5RollCheckTools = new DSA5RollCheckTools({ foundryClient, logger });
+  const dsa5ApplyDamageTools = new DSA5ApplyDamageTools({ foundryClient, logger });
 
   const dnd5eAddFeatureTool = new DnD5eAddFeatureTool({ foundryClient, logger });
   const dnd5eNpcTools = new DnD5eNpcTools({ foundryClient, logger });
@@ -1440,6 +1442,7 @@ async function startBackend(): Promise<void> {
     ...dsa5CharacterCreator.getToolDefinitions(),
     ...dsa5JsonActorImporter.getToolDefinitions(),
     ...dsa5RollCheckTools.getToolDefinitions(),
+    ...dsa5ApplyDamageTools.getToolDefinitions(),
 
     ...dnd5eAddFeatureTool.getToolDefinitions(),
     ...dnd5eNpcTools.getToolDefinitions(),
@@ -1662,6 +1665,11 @@ async function startBackend(): Promise<void> {
 
                 case 'dsa5-roll-check':
                   result = await dsa5RollCheckTools.handleRollCheck(args);
+
+                  break;
+
+                case 'dsa5-apply-damage':
+                  result = await dsa5ApplyDamageTools.handleApplyDamage(args);
 
                   break;
 
