@@ -1,3 +1,9 @@
+## Unreleased
+
+### New Features
+
+- **`dsa5-advance`** — advance a hero with Abenteuerpunkte by the rules, exactly like the "+"/"-" buttons on the DSA5 character sheet. Raise or lower a talent, combat technique, spell, liturgy, ritual or ceremony (by its name on the actor or its id), an attribute (`mu`…`kk` or its localized name such as "Mut") or bought LeP/AsP/KaP, by steps or to a target value: each step pays or refunds the AP from the system's cost table, checks free AP and the system's maximum (reported with the reason) and writes the system's AP tracker entry; a multi-step raise that runs out of AP stops cleanly and says how far it got. `preview` shows the same plan and costs without writing. `award` gives AP to named actors and/or the party with the GM menu's shares for familiars (25 %) and pets (10 %) and a chat message. `free: true` applies a GM ruling without AP (still within the maximum unless `ignoreMaximum`). Npcs and creatures have no AP and are refused. Needs Allow Write Operations (except `preview`). DSA5 worlds only.
+
 ## v0.8.6 (2026-11-04)
 
 ### New Features
