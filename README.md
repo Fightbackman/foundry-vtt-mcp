@@ -184,6 +184,7 @@ Once connected, ask Claude Desktop:
 - **49** wfrp4e-update-actor (WFRP4e Only)
 - **50** wfrp4e-add-items (WFRP4e Only)
 - **51** dsa5-roll-check (DSA5 Only)
+- **52** dsa5-apply-damage (apply damage / healing / regeneration / AsP & KaP — DSA5 Only)
 
 ## Settings
 

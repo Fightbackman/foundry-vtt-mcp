@@ -168,8 +168,27 @@ DSA5 checks are not d20 + modifier rolls, so the generic roll paths call the DSA
 Limitations:
 
 1. Without a dialog only the system's automatic modifiers (active effects, conditions) and the given modifier apply. Inputs the roll dialog asks for, such as the multiple-defense penalty, target size, reach comparison, combat maneuvers and spell modifications, are not applied; include them in the modifier.
-2. Spell and liturgy costs are reported but not deducted. In DSA5 the caster pays them from the chat card's context menu, and `dsa5-roll-check` / `use-item` leave that step to the GM as well.
-3. Regeneration, falling damage and group checks are not covered; regeneration can still be requested through the system's own request dialog in Foundry.
+2. Spell and liturgy costs are reported but not deducted. In DSA5 the caster pays them from the chat card's context menu; `dsa5-apply-damage` with `action: "pay-cost"` does that step (see below).
+3. Falling damage and group checks are not covered. Regeneration is rolled by `dsa5-apply-damage` (see below).
+
+## Damage, healing and energy
+
+**`dsa5-apply-damage`** changes LeP, AsP and KaP through the system (`packages/foundry-module/src/dsa5-damage.ts`), so armor, brawling points, pain and the system's `preApplyDamage` hooks apply as when the GM uses the sheet or the chat card. Every result reports LeP/AsP/KaP before and after, the maximum, the armor used and the conditions DSA5 added, removed or changed (e.g. pain levels, incapacitated). An unlinked token is addressed by its token id; the change lands on that token only.
+
+- `damage` with `messageId` applies the damage of an opposed test from its result card by running the card's own context menu entry: `armor: true` (default) is "apply damage as TP" (TP minus the RS DSA5 computed for the defender), `armor: false` is "apply damage as SP". The id of an attack or defense card linked to exactly one result works too; a still pending test, a test the defender won and an already applied card are refused. `dsa5-roll-check` attack, parry and dodge results that are part of an opposed test now include an `opposed` block with the state (pending/resolved), the winner, the damage (rolled TP, RS, after armor) and the result card id. A damage card (trap, plain dice roll) is applied to `actor`, or to its speaker.
+- `damage` with `actor` and `amount` (a number or a dice formula) applies damage directly; with armor the target's RS (`Actordsa5.armorValue`) is subtracted, as DSA5 does for damage cards.
+- `heal` restores LeP (`Actor#applyDamage` with a negative amount) or, with `resource`, AsP/KaP (`Actor#applyMana`); DSA5 caps both at the maximum.
+- `spend` pays AsP/KaP with `Actor#applyMana`, which refuses when the actor has too few.
+- `pay-cost` pays the cost of a spell, ritual, liturgy or ceremony card with the card's "Pay AsP/KaP" entry (which also starts tracking maintained spells). An insufficient pool is refused before the system is called, because DSA5 marks the card as paid even when the payment fails.
+- `regenerate` rolls the regeneration test (`setupRegeneration` + `basicTest`, as the sheet's button) with the dialog's inputs as parameters (`campsite`, `interruption`, `badEnvironment`, `modifier`, `resources`) and applies the card with `RegenerationHelper`; `apply: false` only rolls, and `messageId` applies a rolled card.
+
+Limitations:
+
+1. The chat card actions are not exported by the system bundle; the bridge collects them from the `getChatMessageContextOptions` hook DSA5 uses to build the chat context menu and identifies them by their visibility check (`canHurt`, `canHurtSP`, `canCostMana`). If a future DSA5 version renames those, the tool reports that the action is unavailable instead of guessing.
+2. With charged power sources (Kraftspeicher) DSA5 asks in a dialog how to split an AsP cost. `pay-cost` refuses then (pay from the card in Foundry); `spend` pays from the actor's own AsP only.
+3. A negative regeneration result needs a confirmation in DSA5; as when it is declined, negative values are treated as 0.
+4. Regeneration special abilities that are dialog checkboxes (e.g. the fixed-die options) and homunculus blood baths are not offered.
+5. Dependent conditions (incapacitated at pain level IV) are added by the system shortly after the LeP change; the report waits up to about a second for them.
 
 ## Integration Points
 
