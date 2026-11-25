@@ -724,6 +724,269 @@ describe('DSA5 journal pages', () => {
     });
   });
 
+  describe('locations', () => {
+    /** Stand-in for the system's dsalocation data model; only what the tool calls. */
+    function stubLocationModel() {
+      const model = {
+        fieldsFromSource: vi.fn((document: any) => ({
+          name: document.name,
+          sourceUuid: document.uuid,
+          img: 'icons/source.webp',
+        })),
+        isValidSource: vi.fn(
+          (document: any) =>
+            document.documentName === 'JournalEntry' ||
+            (document.documentName === 'JournalEntryPage' && document.type === 'text')
+        ),
+        ensurePlayerReadable: vi.fn(async () => undefined),
+      };
+      vi.stubGlobal('CONFIG', { JournalEntryPage: { dataModels: { dsalocation: model } } });
+      return model;
+    }
+
+    function locationJournal(locations: Record<string, any> = {}) {
+      return makeJournal('j1', 'Orte', [
+        { id: 'p1', name: 'Orte', type: 'dsalocation', system: { locations } },
+      ]);
+    }
+
+    function withPlayers(...players: Array<{ id: string; name: string }>) {
+      const users = [{ id: 'gm', name: 'GM', isGM: true }, ...players];
+      (globalThis as any).game.users = {
+        contents: users,
+        get: (id: string) => users.find(user => user.id === id),
+      };
+    }
+
+    it('needs a DSA5 version with location pages', async () => {
+      stubWorld({});
+      (globalThis as any).game.system.version = '8.1.11';
+
+      const read = await access().read({ pageType: 'locations' });
+      const manage = await access().manage({
+        pageType: 'locations',
+        action: 'create',
+        data: { name: 'Gareth' },
+      });
+
+      expect(read).toMatchObject({ success: false, error: expect.stringContaining('DSA5 8.2') });
+      expect(read.error).toContain('8.1.11');
+      expect(manage).toMatchObject({ success: false, error: expect.stringContaining('8.2') });
+    });
+
+    it('creates a journal under the default name and adds it to the almanac', async () => {
+      const world = stubWorld({});
+      stubLocationModel();
+
+      const result = await access().manage({
+        pageType: 'locations',
+        action: 'create',
+        data: {
+          name: 'Trackenborn',
+          kind: 'settlement',
+          region: ['Eisenwald', 'Kosch'],
+          tags: ['village', 'mine'],
+          description: 'A village.',
+        },
+      });
+
+      expect(result).toMatchObject({ success: true, createdJournal: true, createdPage: true });
+      expect(world.createJournal).toHaveBeenCalledWith({
+        name: 'Locations',
+        pages: [{ name: 'Locations', type: 'dsalocation' }],
+      });
+      expect(world.journals[0].pages.contents[0].system.locations.id1).toEqual({
+        name: 'Trackenborn',
+        kind: 'settlement',
+        faction: 'Eisenwald, Kosch',
+        tags: 'village, mine',
+        description: '<p>A village.</p>',
+        visible: false,
+        important: false,
+        visiblePlayers: [],
+      });
+      expect(world.dsa5Settings.locationJournals.activated).toEqual([
+        { uuid: 'JournalEntry.j1', name: 'Locations' },
+      ]);
+      expect(world.refreshParts).toHaveBeenCalledWith(['locations', 'config']);
+      expect(result.entry).toMatchObject({
+        name: 'Trackenborn',
+        region: 'Eisenwald, Kosch',
+        tags: ['village', 'mine'],
+        locationUuid: 'AlmanacLocation.p0.id1',
+      });
+    });
+
+    it('lists locations with their parent, bound document and players', async () => {
+      const source = makeJournal('j2', 'Trackenborn notes', []);
+      const journal = locationJournal({
+        kosch: { name: 'Kosch', kind: 'region', faction: '' },
+        track: {
+          name: 'Trackenborn',
+          kind: 'settlement',
+          faction: 'Eisenwald',
+          visible: true,
+          visiblePlayers: ['u1'],
+          parentUuid: 'AlmanacLocation.p1.kosch',
+          sourceUuid: 'JournalEntry.j2',
+          description: '<p>Mines <b>everywhere</b></p>',
+        },
+        cave: { name: 'Old cave', kind: 'dungeon', parentUuid: 'AlmanacLocation.p1.track' },
+      });
+      stubWorld({ journals: [journal, source] });
+      stubLocationModel();
+
+      const list = await access().read({ pageType: 'locations', faction: 'eisen' });
+      const detail = await access().read({ pageType: 'locations', entryKey: 'track' });
+      const dungeons = await access().read({ pageType: 'locations', kind: 'dungeon' });
+
+      expect(list.entries).toHaveLength(1);
+      expect(list.entries[0]).toMatchObject({
+        name: 'Trackenborn',
+        kind: 'settlement',
+        region: 'Eisenwald',
+        visible: true,
+        players: ['Alrik'],
+        description: 'Mines everywhere',
+        parent: { uuid: 'AlmanacLocation.p1.kosch', entryKey: 'kosch', name: 'Kosch' },
+        source: { uuid: 'JournalEntry.j2', name: 'Trackenborn notes' },
+      });
+      expect(list.pages[0]).toMatchObject({ entryCount: 3, shownInAlmanac: false });
+      expect(detail.entry).toMatchObject({
+        descriptionHtml: '<p>Mines <b>everywhere</b></p>',
+        children: [{ entryKey: 'cave', name: 'Old cave' }],
+      });
+      expect(dungeons.entries.map((entry: any) => entry.name)).toEqual(['Old cave']);
+    });
+
+    it('resolves the parent by name and shares with chosen players only', async () => {
+      const journal = locationJournal({ kosch: { name: 'Kosch', kind: 'region' } });
+      stubWorld({ journals: [journal] });
+      withPlayers({ id: 'u1', name: 'Alrik' }, { id: 'u2', name: 'Alrike' });
+      const model = stubLocationModel();
+
+      const result = await access().manage({
+        pageType: 'locations',
+        action: 'create',
+        data: { name: 'Ferdok', parent: 'kosch', players: ['Alrik'] },
+      });
+
+      expect(result.success).toBe(true);
+      expect(journal.pages.contents[0].system.locations.id1).toMatchObject({
+        parentUuid: 'AlmanacLocation.p1.kosch',
+        visible: true,
+        visiblePlayers: ['u1'],
+      });
+      expect(model.ensurePlayerReadable).toHaveBeenCalledWith(journal.pages.contents[0]);
+    });
+
+    it('stores "all players" as visible without a player list', async () => {
+      const journal = locationJournal({ a: { name: 'Gareth', visiblePlayers: ['u1'] } });
+      stubWorld({ journals: [journal] });
+      withPlayers({ id: 'u1', name: 'Alrik' }, { id: 'u2', name: 'Alrike' });
+      stubLocationModel();
+
+      await access().manage({
+        pageType: 'locations',
+        action: 'update',
+        entryKey: 'a',
+        data: { players: ['Alrik', 'Alrike'] },
+      });
+      const shared = { ...journal.pages.contents[0].system.locations.a };
+      await access().manage({
+        pageType: 'locations',
+        action: 'update',
+        entryKey: 'a',
+        data: { visible: false },
+      });
+
+      expect(shared).toMatchObject({ visible: true, visiblePlayers: [] });
+      expect(journal.pages.contents[0].system.locations.a).toMatchObject({
+        visible: false,
+        visiblePlayers: [],
+      });
+    });
+
+    it('keeps visible when an empty player list is passed', async () => {
+      const journal = locationJournal({ a: { name: 'Gareth', visible: true, visiblePlayers: [] } });
+      stubWorld({ journals: [journal] });
+      stubLocationModel();
+
+      await access().manage({
+        pageType: 'locations',
+        action: 'update',
+        entryKey: 'a',
+        data: { players: [] },
+      });
+
+      expect(journal.pages.contents[0].system.locations.a).toMatchObject({
+        visible: true,
+        visiblePlayers: [],
+      });
+    });
+
+    it('refuses a parent that would create a loop', async () => {
+      const journal = locationJournal({
+        kosch: { name: 'Kosch' },
+        ferdok: { name: 'Ferdok', parentUuid: 'AlmanacLocation.p1.kosch' },
+      });
+      stubWorld({ journals: [journal] });
+      stubLocationModel();
+
+      const result = await access().manage({
+        pageType: 'locations',
+        action: 'update',
+        entryKey: 'kosch',
+        data: { parent: 'Ferdok' },
+      });
+
+      expect(result).toMatchObject({ success: false, error: expect.stringContaining('ancestor') });
+      expect(journal.pages.contents[0].update).not.toHaveBeenCalled();
+    });
+
+    it('fills a new location from its bound journal and rejects structured pages', async () => {
+      const journal = locationJournal();
+      const notes = makeJournal('j2', 'Trackenborn notes', []);
+      notes.documentName = 'JournalEntry';
+      journal.pages.contents[0].documentName = 'JournalEntryPage';
+      stubWorld({ journals: [journal, notes] });
+      stubLocationModel();
+
+      const created = await access().manage({
+        pageType: 'locations',
+        action: 'create',
+        data: { source: 'Trackenborn notes', kind: 'settlement' },
+      });
+      const structured = await access().manage({
+        pageType: 'locations',
+        action: 'create',
+        data: { name: 'x', source: journal.pages.contents[0].uuid },
+      });
+
+      expect(created.success).toBe(true);
+      expect(journal.pages.contents[0].system.locations.id1).toMatchObject({
+        name: 'Trackenborn notes',
+        sourceUuid: 'JournalEntry.j2',
+        img: 'icons/source.webp',
+        kind: 'settlement',
+      });
+      expect(structured).toMatchObject({
+        success: false,
+        error: expect.stringContaining('source'),
+      });
+    });
+
+    it('points the generic journal tools at dsa5-journal-read', () => {
+      stubWorld({});
+      const [page] = locationJournal({ a: {}, b: {} }).pages.contents;
+
+      expect(DSA5JournalAccess.describeStructuredPage(page)).toBe(
+        '[DSA5 structured page "locations" with 2 entries. Read it with dsa5-journal-read ' +
+          '(pageType: "locations", page: "JournalEntry.j1.JournalEntryPage.p1").]'
+      );
+    });
+  });
+
   describe('deleting and permissions', () => {
     const questJournal = () =>
       makeJournal('j1', 'Quests', [
