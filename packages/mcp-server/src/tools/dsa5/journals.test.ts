@@ -88,6 +88,41 @@ describe('DSA5 journal tools', () => {
       expect(result.success).toBe(true);
     });
 
+    it('forwards a location create and lets a bound source stand in for the name', async () => {
+      const full = {
+        pageType: 'locations',
+        action: 'create',
+        data: {
+          name: 'Trackenborn',
+          kind: 'settlement',
+          region: ['Eisenwald', 'Kosch'],
+          tags: 'village, mine',
+          parent: 'Kosch',
+          players: ['Alrik'],
+          image: null,
+        },
+      };
+      const fromSource = {
+        pageType: 'locations',
+        action: 'create',
+        data: { source: 'JournalEntry.abc' },
+      };
+
+      expect((await tools.handleManage(full)).success).toBe(true);
+      expect((await tools.handleManage(fromSource)).success).toBe(true);
+      expect(query).toHaveBeenCalledWith('foundry-mcp-bridge.dsa5ManageJournal', full);
+    });
+
+    it('reads locations with a kind filter', async () => {
+      await tools.handleRead({ pageType: 'locations', kind: 'dungeon', faction: 'Eisenwald' });
+
+      expect(query).toHaveBeenCalledWith('foundry-mcp-bridge.dsa5ReadJournals', {
+        pageType: 'locations',
+        kind: 'dungeon',
+        faction: 'Eisenwald',
+      });
+    });
+
     it.each([
       [
         'a create without the entry name',
@@ -144,6 +179,21 @@ describe('DSA5 journal tools', () => {
         'a quality out of range',
         { pageType: 'citydetails', action: 'update', entryKey: 'k', data: { quality: 6 } },
         'data.quality',
+      ],
+      [
+        'a location without name or source',
+        { pageType: 'locations', action: 'create', data: { region: 'Kosch' } },
+        'data.name or data.source',
+      ],
+      [
+        'an unknown location kind',
+        { pageType: 'locations', action: 'update', entryKey: 'k', data: { kind: 'castle' } },
+        'data.kind',
+      ],
+      [
+        'the system field name faction on a location',
+        { pageType: 'locations', action: 'update', entryKey: 'k', data: { faction: 'Kosch' } },
+        'data',
       ],
       [
         'a write to a tracker page',

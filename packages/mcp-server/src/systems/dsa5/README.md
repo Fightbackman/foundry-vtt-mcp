@@ -52,6 +52,7 @@ of text. Two tools cover them (`tools/dsa5/journals.ts`, Foundry side in
 | `citydetails`  | `citydetails`         | `details`                   | yes      |
 | `aptracker`    | `dsaaptracker`        | `entries`                   | no       |
 | `moneytracker` | `dsamoneytracker`     | `entries`                   | no       |
+| `locations`    | `dsalocation`         | `locations`                 | yes      |
 
 Behaviour worth knowing:
 
@@ -68,6 +69,26 @@ Behaviour worth knowing:
 - Quest dates are partial: only the parts passed are written. Calendar events always store a
   complete date, from which the system derives the day of the year.
 - New quests and events start hidden from players, matching the system's own "new entry".
+
+Locations (`dsalocation`, the almanac's "Orte") exist from DSA5 8.2 on; on older systems
+both tools return an error saying so. They are handled like the other types, with a few
+specifics:
+
+- The system field `faction` is shown as the location's region and is exposed as `region`
+  (a comma-separated list; the almanac groups a location under each value). `kind` is one of
+  `settlement`, `landmark`, `dungeon`, `region`, `building`, `other`.
+- `parent` builds the location hierarchy. Another location can be named by entry key, name or
+  its `AlmanacLocation.<pageId>.<entryKey>` UUID, which is what gets stored in `parentUuid`;
+  other UUIDs (an Atlas marker, a journal) are stored as given. Loops are refused. Reading an
+  entry resolves the parent to its name and lists the entry's children.
+- `source` binds the location to a journal, a text page or an Atlas marker (`sourceUuid`). On
+  create it fills name and image (and, for Atlas markers, subtitle and region) through the
+  system's own model, so only `name` or `source` is required.
+- `visible: true` shares the entry with all players, `players` with the named users only
+  (`visiblePlayers`), `visible: false` hides it again. When an entry becomes visible, the
+  journal is made readable for players the way the system's eye toggle does it.
+- New location journals are added to the `locationJournals` almanac setting. The banner crop
+  (`imageFrame`) is left alone, except that clearing `image` also clears it.
 
 ## Architecture
 
