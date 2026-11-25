@@ -14,8 +14,17 @@ const READ_PAGE_TYPES = [
   'citydetails',
   'aptracker',
   'moneytracker',
+  'locations',
 ] as const;
-const WRITE_PAGE_TYPES = ['personae', 'quests', 'calendar', 'citydetails'] as const;
+const WRITE_PAGE_TYPES = ['personae', 'quests', 'calendar', 'citydetails', 'locations'] as const;
+const LOCATION_KINDS = [
+  'settlement',
+  'landmark',
+  'dungeon',
+  'region',
+  'building',
+  'other',
+] as const;
 
 const readSchema = z
   .object({
@@ -186,19 +195,46 @@ const cityDetailData = z
   .partial()
   .strict();
 
+const locationData = z
+  .object({
+    name: z.string().min(1),
+    subtitle: z.string(),
+    kind: z.enum(LOCATION_KINDS),
+    region: tags,
+    description: z.string(),
+    notes: z.string(),
+    img: z.string(),
+    image: z.string().nullable(),
+    tags,
+    visible: z.boolean(),
+    important: z.boolean(),
+    players: z.array(z.string().min(1)),
+    parent: z.string().nullable(),
+    source: z.string().nullable(),
+  })
+  .partial()
+  .strict();
+
 const dataSchemas = {
   personae: personaeData,
   quests: questData,
   calendar: calendarData,
   citydetails: cityDetailData,
+  locations: locationData,
 } as const;
 
-/** Field a new entry needs; a persona can take its name from a linked actor instead. */
+/** Field a new entry needs; some types can take their name from a linked document instead. */
 const requiredOnCreate: Record<(typeof WRITE_PAGE_TYPES)[number], string> = {
   personae: 'name',
   quests: 'title',
   calendar: 'title',
   citydetails: 'name',
+  locations: 'name',
+};
+/** Field that can stand in for the required one on create. */
+const alternativeOnCreate: Partial<Record<(typeof WRITE_PAGE_TYPES)[number], string>> = {
+  personae: 'actor',
+  locations: 'source',
 };
 
 const manageSchema = z
@@ -241,12 +277,12 @@ const manageSchema = z
 
     if (input.action === 'create') {
       const required = requiredOnCreate[input.pageType];
-      const hasActor = input.pageType === 'personae' && !!input.data.actor;
-      if (!input.data[required] && !hasActor) {
+      const alternative = alternativeOnCreate[input.pageType];
+      if (!input.data[required] && !(alternative && input.data[alternative])) {
         issue(
           ['data', required],
-          input.pageType === 'personae'
-            ? 'data.name or data.actor is required for create'
+          alternative
+            ? `data.${required} or data.${alternative} is required for create`
             : `data.${required} is required for create`
         );
       }
@@ -282,7 +318,9 @@ export class DSA5JournalTools {
           '("personae": NPCs and creatures with faction, tags, linked actor, notes and their ' +
           'relationship to each hero), the quest log ("quests": status, objectives, dates, ' +
           'linked actors/items/journals), almanac events ("calendar"), city details ' +
-          '("citydetails": temples, inns, merchants, … with quality and price level), and the ' +
+          '("citydetails": temples, inns, merchants, … with quality and price level), almanac ' +
+          'locations ("locations", DSA5 8.2+: places with region, kind, parent location and ' +
+          'linked journal or Atlas marker), and the ' +
           'read-only AP and money logs ("aptracker", "moneytracker"). These pages hold no text, ' +
           'so list-journals and search-journals cannot read them. Call without pageType for an ' +
           'overview of all such pages; with pageType to list entries (summaries, filterable); ' +
@@ -312,8 +350,11 @@ export class DSA5JournalTools {
               type: 'string',
               description: 'Case-insensitive text to find anywhere in an entry.',
             },
-            faction: { type: 'string', description: 'personae: part of the faction name.' },
-            tag: { type: 'string', description: 'personae / quests: exact tag.' },
+            faction: {
+              type: 'string',
+              description: 'personae: part of the faction name. locations: part of the region.',
+            },
+            tag: { type: 'string', description: 'personae / quests / locations: exact tag.' },
             status: {
               type: 'string',
               enum: ['open', 'ended', 'failed'],
@@ -323,7 +364,8 @@ export class DSA5JournalTools {
               type: 'string',
               description:
                 'personae: "person" or "creature". citydetails: temples, inns, taverns, crafts, ' +
-                'merchants, services, healers or travellers.',
+                'merchants, services, healers or travellers. locations: settlement, landmark, ' +
+                'dungeon, region, building or other.',
             },
             visible: {
               type: 'boolean',
@@ -342,11 +384,12 @@ export class DSA5JournalTools {
         description:
           '[DSA5 only] Create, update or delete one entry on a DSA5 structured journal page: a ' +
           'Dramatis Personae entry ("personae"), a quest ("quests"), an almanac event ' +
-          '("calendar") or a city detail ("citydetails"). On create, the entry goes to the ' +
+          '("calendar"), a city detail ("citydetails") or an almanac location ("locations", ' +
+          'DSA5 8.2+). On create, the entry goes to the ' +
           'given page, or to the only page of that type; if none exists a journal and page are ' +
           'created and added to the DSA5 almanac. update and delete need entryKey (from ' +
           'dsa5-journal-read); update changes only the fields passed in data. Text fields ' +
-          'accept plain text or HTML. New quests and events start hidden from players unless ' +
+          'accept plain text or HTML. New quests, events and locations start hidden from players unless ' +
           'visible is true. Needs Allow Write Operations.\n' +
           'data fields by pageType:\n' +
           '- personae: name, kind (person|creature), actor (name, id or UUID of the actor to ' +
@@ -371,6 +414,13 @@ export class DSA5JournalTools {
           '- citydetails: name, kind (temples|inns|taverns|crafts|merchants|services|healers|' +
           'travellers), typeText, description, gmNotes, img, visible, quality (0 poor - 5 ' +
           'exceptional, or null), price (0 very cheap, 2 average, 5 usury, or null).\n' +
+          '- locations: name, subtitle, kind (settlement|landmark|dungeon|region|building|' +
+          'other), region (one or more regions the location is grouped under), description, ' +
+          'notes (player notes), img (icon), image (banner, null to clear), tags, visible ' +
+          '(true shares with all players), players (user names: share with only these), ' +
+          'important, parent (the containing location by name, entryKey or UUID, null to ' +
+          'clear), source (name or UUID of the journal, page or Atlas marker the location ' +
+          'stands for; on create it fills name and image; null to unbind).\n' +
           'Months are 1 = Praios … 12 = Rahja, 13 = Nameless Days, or the month name.',
         inputSchema: {
           type: 'object',
