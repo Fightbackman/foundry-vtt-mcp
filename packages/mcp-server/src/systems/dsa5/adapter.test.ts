@@ -149,6 +149,33 @@ describe('DSA5Adapter.extractCharacterStats', () => {
     expect(stats.spellcasting).toBeUndefined();
   });
 
+  it('reads the tradition from the Tradition special ability on DSA5 8.2', () => {
+    const priest = structuredClone(hero) as any;
+    delete priest.system.tradition;
+    priest.items = [
+      ...priest.items,
+      {
+        name: 'Tradition (Praioskirche)',
+        type: 'specialability',
+        system: { isTradition: true, category: { value: 'clerical' }, guidevalue: 'kl' },
+      },
+      // Two magical traditions: ambiguous, so the system (and we) ignore them.
+      ...['A', 'B'].map(name => ({
+        name,
+        type: 'specialability',
+        system: { isTradition: true, category: { value: 'magical' } },
+      })),
+      {
+        name: 'Not a tradition',
+        type: 'specialability',
+        system: { category: { value: 'magical' } },
+      },
+    ];
+    const priestStats = adapter.extractCharacterStats(priest);
+    expect(priestStats.tradition).toEqual({ clerical: 'Tradition (Praioskirche)' });
+    expect(priestStats.spellcasting).toMatchObject({ hasSpells: true });
+  });
+
   it('reports AsP and tradition for a spellcaster', () => {
     const mage = structuredClone(hero);
     mage.system.status.astralenergy = { initial: 20, value: 17, current: 34, max: 34 };

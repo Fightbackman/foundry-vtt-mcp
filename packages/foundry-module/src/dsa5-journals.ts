@@ -516,6 +516,68 @@ export class DSA5JournalAccess {
     return globalAny().CONFIG?.JournalEntryPage?.dataModels?.[config.foundryType] ?? null;
   }
 
+  /**
+   * Whether entries of this page type carry a `visiblePlayers` list. DSA5 8.2 added it to
+   * personae, quests, events and city details (locations always had it); 8.1 has none.
+   */
+  private supportsVisiblePlayers(config: PageTypeConfig): boolean {
+    if (config.foundryType === 'dsalocation') return true;
+    const entries = this.dataModel(config)?.schema?.fields?.[config.collection];
+    return !!entries?.element?.fields?.visiblePlayers;
+  }
+
+  /** User names for a list of user ids (unknown ids are kept as they are). */
+  private userNames(ids: unknown): string[] {
+    const users = gameAny().users;
+    return (Array.isArray(ids) ? ids : []).map((id: string) => users?.get?.(id)?.name ?? id);
+  }
+
+  /** `players` for a read result, only where the entry stores a player list (DSA5 8.2+). */
+  private playersField(entry: any): { players?: string[] } {
+    return Array.isArray(entry?.visiblePlayers)
+      ? { players: this.userNames(entry.visiblePlayers) }
+      : {};
+  }
+
+  /**
+   * Visibility: visible alone shares with every player (or nobody); players narrows it to
+   * those users, like the eye and player toggles on the system's sheets. An empty players
+   * list only drops the narrowing and leaves visible as it is. Writes `visible` and
+   * `visiblePlayers` into the payload; returns the narrowed ids (empty = all players).
+   */
+  private applyPlayerVisibility(
+    config: PageTypeConfig,
+    data: Record<string, any>,
+    payload: Record<string, any>
+  ): string[] | undefined {
+    if (!this.supportsVisiblePlayers(config)) {
+      if (data.players !== undefined && config.foundryType !== 'dsaquestlog') {
+        throw new Error(
+          'players needs DSA5 8.2 or later (this system has no per-player visibility)'
+        );
+      }
+      return undefined;
+    }
+    if (data.players !== undefined && data.players !== null) {
+      const ids = this.resolveUsers(data.players);
+      if (ids.length && data.visible === false) {
+        throw new Error('players cannot be combined with visible: false');
+      }
+      const players = this.playerIds();
+      const everyone = players.length > 0 && players.every(id => ids.includes(id));
+      payload.visiblePlayers = everyone ? [] : [...new Set(ids)];
+      if (ids.length) payload.visible = data.visible ?? true;
+      else if (data.visible !== undefined) payload.visible = !!data.visible;
+      return payload.visiblePlayers;
+    }
+    if (data.visible !== undefined) {
+      payload.visible = !!data.visible;
+      payload.visiblePlayers = [];
+      return [];
+    }
+    return undefined;
+  }
+
   private allPages(config: PageTypeConfig): PageRef[] {
     const refs: PageRef[] = [];
     for (const journal of toArray(gameAny().journal)) {
@@ -807,6 +869,7 @@ export class DSA5JournalAccess {
           categoryLabel: category.label,
           location: entry.location ?? '',
           visible: !!entry.visible,
+          ...this.playersField(entry),
           recurring: !!entry.recurring,
           content: text(entry.content),
           ...(detail ? { contentHtml: entry.content ?? '' } : {}),
@@ -832,6 +895,7 @@ export class DSA5JournalAccess {
             ? { priceLabel: localize(`DSACITYDETAILS.PRICE.${price}`, String(price)) }
             : {}),
           visible: entry.visible !== false,
+          ...this.playersField(entry),
           description: text(entry.description),
           gmNotes: text(entry.gmNotes),
           ...(detail
@@ -869,6 +933,7 @@ export class DSA5JournalAccess {
       faction: entry.faction ?? '',
       tags: tagList(entry.tags),
       visible: !!entry.visible,
+      ...this.playersField(entry),
       important: !!entry.important,
       description: text(descriptionHtml),
       notes: text(notesHtml),
@@ -980,7 +1045,6 @@ export class DSA5JournalAccess {
     text: (html: unknown) => string,
     detail: boolean
   ) {
-    const users = gameAny().users;
     const kind = entry.kind || 'other';
     const result: any = {
       name: entry.name ?? '',
@@ -990,7 +1054,7 @@ export class DSA5JournalAccess {
       region: entry.faction ?? '',
       tags: tagList(entry.tags),
       visible: !!entry.visible,
-      players: (entry.visiblePlayers ?? []).map((id: string) => users?.get?.(id)?.name ?? id),
+      players: this.userNames(entry.visiblePlayers),
       important: !!entry.important,
       description: text(entry.description),
       notes: text(entry.notes),
@@ -1018,7 +1082,6 @@ export class DSA5JournalAccess {
     const status = this.choice(QUEST_STATUS, entry.status, 'DSAQUESTLOG.STATUS');
     const priority = this.choice(QUEST_PRIORITY, entry.priority, 'DSAQUESTLOG.PRIORITY');
     const audience = this.choice(QUEST_AUDIENCE, entry.audience, 'DSAQUESTLOG.AUDIENCE');
-    const users = gameAny().users;
 
     const result: any = {
       title: entry.title ?? '',
@@ -1028,7 +1091,10 @@ export class DSA5JournalAccess {
       priority: priority.name,
       priorityLabel: priority.label,
       audience: audience.name,
-      players: (entry.playerOwners ?? []).map((id: string) => users?.get?.(id)?.name ?? id),
+      // DSA5 8.2 keeps the list in visiblePlayers and falls back to the 8.1 playerOwners.
+      players: this.userNames(
+        entry.visiblePlayers?.length ? entry.visiblePlayers : (entry.playerOwners ?? [])
+      ),
       visible: entry.visible !== false,
       pinToTop: !!entry.pinToTop,
       chapter: entry.chapter ?? '',
@@ -1126,13 +1192,13 @@ export class DSA5JournalAccess {
       case 'personae':
         return this.preparePersona(config, existing, data, warnings);
       case 'quests':
-        payload = await this.buildQuest(existing, data);
+        payload = await this.buildQuest(config, existing, data);
         break;
       case 'calendar':
-        payload = this.buildCalendarEvent(existing, data);
+        payload = this.buildCalendarEvent(config, existing, data);
         break;
       case 'citydetails':
-        payload = this.buildCityDetail(existing, data);
+        payload = this.buildCityDetail(config, existing, data);
         break;
       case 'locations':
         return this.prepareLocation(config, existing, data, warnings, key);
@@ -1179,6 +1245,7 @@ export class DSA5JournalAccess {
         'linkActorNotes',
       ],
     });
+    this.applyPlayerVisibility(config, data, payload);
     if (data.kind !== undefined) payload.type = enumIndex(PERSONA_KINDS, data.kind, 'kind');
     if (data.tags !== undefined) payload.tags = tagList(data.tags).join(', ');
     if (data.garadan !== undefined) {
@@ -1287,7 +1354,7 @@ export class DSA5JournalAccess {
     }
   }
 
-  private async buildQuest(existing: any, data: Record<string, any>) {
+  private async buildQuest(config: PageTypeConfig, existing: any, data: Record<string, any>) {
     const payload: Record<string, any> = {};
     if (!existing && !data.title) throw new Error('title is required');
 
@@ -1303,7 +1370,17 @@ export class DSA5JournalAccess {
     if (data.audience !== undefined) {
       payload.audience = enumIndex(QUEST_AUDIENCE, data.audience, 'audience');
     }
-    if (data.players !== undefined) payload.playerOwners = this.resolveUsers(data.players ?? []);
+    const shownTo = this.applyPlayerVisibility(config, data, payload);
+    if (shownTo) {
+      // DSA5 8.2 keeps playerOwners in step with visiblePlayers and derives the audience
+      // from the visibility (0 all players, 1 some, 2 nobody), like its own toggles.
+      payload.playerOwners = shownTo;
+      if (data.audience === undefined && payload.visible !== undefined) {
+        payload.audience = !payload.visible ? 2 : shownTo.length ? 1 : 0;
+      }
+    } else if (data.players !== undefined && !this.supportsVisiblePlayers(config)) {
+      payload.playerOwners = this.resolveUsers(data.players ?? []);
+    }
     if (data.tags !== undefined) payload.tags = tagList(data.tags).join(', ');
     if (data.image !== undefined) {
       payload.image = data.image || null;
@@ -1399,7 +1476,7 @@ export class DSA5JournalAccess {
     return Object.keys(result).length ? result : null;
   }
 
-  private buildCalendarEvent(existing: any, data: Record<string, any>) {
+  private buildCalendarEvent(config: PageTypeConfig, existing: any, data: Record<string, any>) {
     const payload: Record<string, any> = {};
     if (!existing && !data.title) throw new Error('title is required');
 
@@ -1408,6 +1485,7 @@ export class DSA5JournalAccess {
       html: ['content'],
       flags: ['visible', 'recurring'],
     });
+    this.applyPlayerVisibility(config, data, payload);
     if (data.category !== undefined) {
       const category = data.category === 'event' ? 'anniversary' : data.category;
       payload.category = enumIndex(CALENDAR_CATEGORIES, category, 'category');
@@ -1429,7 +1507,7 @@ export class DSA5JournalAccess {
     return payload;
   }
 
-  private buildCityDetail(existing: any, data: Record<string, any>) {
+  private buildCityDetail(config: PageTypeConfig, existing: any, data: Record<string, any>) {
     const payload: Record<string, any> = {};
     if (!existing && !data.name) throw new Error('name is required');
 
@@ -1438,6 +1516,7 @@ export class DSA5JournalAccess {
       html: ['description', 'gmNotes'],
       flags: ['visible'],
     });
+    this.applyPlayerVisibility(config, data, payload);
     if (data.kind !== undefined) {
       payload.kind = CITY_KINDS[enumIndex(CITY_KINDS, data.kind, 'kind')];
     }
@@ -1572,23 +1651,7 @@ export class DSA5JournalAccess {
       if (!data.image) payload.imageFrame = {};
     }
 
-    // Visibility: visible alone shares with every player (or nobody); players narrows it
-    // to those users, like the eye and player toggles on the location sheet. An empty
-    // players list only drops the narrowing and leaves visible as it is.
-    if (data.players !== undefined && data.players !== null) {
-      const ids = this.resolveUsers(data.players);
-      if (ids.length && data.visible === false) {
-        throw new Error('players cannot be combined with visible: false');
-      }
-      const players = this.playerIds();
-      const everyone = players.length > 0 && players.every(id => ids.includes(id));
-      payload.visiblePlayers = everyone ? [] : [...new Set(ids)];
-      if (ids.length) payload.visible = data.visible ?? true;
-      else if (data.visible !== undefined) payload.visible = !!data.visible;
-    } else if (data.visible !== undefined) {
-      payload.visible = !!data.visible;
-      payload.visiblePlayers = [];
-    }
+    this.applyPlayerVisibility(config, data, payload);
 
     if (data.parent !== undefined) {
       payload.parentUuid = data.parent ? await this.resolveParent(String(data.parent), ownKey) : '';

@@ -22,7 +22,7 @@ import {
   type Dsa5CheckType,
   type Dsa5MessageMode,
 } from './dsa5-rolls.js';
-import { createDsa5Actor, createDsa5Actors } from './dsa5-actor-create.js';
+import { assertDsa5ActorFields, createDsa5Actor, createDsa5Actors } from './dsa5-actor-create.js';
 import { buildDSA5CombatSummary, type DSA5CombatSummary } from './dsa5-combat.js';
 import { dsa5EquipmentFields } from './dsa5-items.js';
 import { applyDsa5Damage, type Dsa5DamageParams } from './dsa5-damage.js';
@@ -12051,6 +12051,7 @@ export class FoundryDataAccess {
             systemPatch[key] = val;
           }
         }
+        if ((game as any).system?.id === 'dsa5') assertDsa5ActorFields(actor.type, systemPatch);
         patch.system = systemPatch;
       }
 

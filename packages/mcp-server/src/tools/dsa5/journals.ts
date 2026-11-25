@@ -58,6 +58,7 @@ const personaeData = z
     img: z.string(),
     visible: z.boolean(),
     important: z.boolean(),
+    players: z.array(z.string().min(1)),
     garadan: z.number().int().min(0).max(6),
     showGaradanGMOnly: z.boolean(),
     showSpecies: z.boolean(),
@@ -165,6 +166,7 @@ const calendarData = z
     endDay: z.number().int().min(1).nullable(),
     category: z.enum(['general', 'holiday', 'anniversary', 'historical', 'milestone']),
     visible: z.boolean(),
+    players: z.array(z.string().min(1)),
     recurring: z.boolean(),
   })
   .partial()
@@ -189,6 +191,7 @@ const cityDetailData = z
     gmNotes: z.string(),
     img: z.string(),
     visible: z.boolean(),
+    players: z.array(z.string().min(1)),
     quality: rating,
     price: rating,
   })
@@ -395,13 +398,14 @@ export class DSA5JournalTools {
           '- personae: name, kind (person|creature), actor (name, id or UUID of the actor to ' +
           'link, null to unlink; the system then fills name, image, faction and subtitle from ' +
           'it unless you pass them), subtitle, faction, tags (list), description, notes (stored ' +
-          'on the linked actor when linkActorNotes is on), img, visible, important, garadan ' +
+          'on the linked actor when linkActorNotes is on), img, visible, players (DSA5 8.2+: ' +
+          'user names to share with only these players), important, garadan ' +
           '(0-4 or 6), showGaradanGMOnly, showSpecies, showCulture, showProfession, ' +
           'showActorDescription, linkActorNotes, socialContacts [{hero, level 1-9 or null to ' +
           'remove}] (1 = unquenchable hatred, 5 = neutral, 9 = deep love).\n' +
           '- quests: title, summary, details, gmNotes, status (open|ended|failed), priority ' +
-          '(main|side|personal), audience (party|players|gm), players (user names, for audience ' +
-          '"players"), visible, pinToTop, chapter, location, tags, image, startDate / targetDate ' +
+          '(main|side|personal), audience (party|players|gm), players (user names; on DSA5 8.2+ ' +
+          'the quest is then shown to only these players), visible, pinToTop, chapter, location, tags, image, startDate / targetDate ' +
           '/ completionDate ({day?, month?, year?}, any part may be omitted; null clears), ' +
           'objectives (a list of texts to add, or {add:[{text,status,visible}], ' +
           'update:[{key,text,status,visible}], remove:[key]} with status open|done|failed), ' +
@@ -409,10 +413,12 @@ export class DSA5JournalTools {
           '{add:[{ref,visible}], remove:[key or uuid]}).\n' +
           '- calendar: title, content, location, date {day, month, year} (defaults to the ' +
           'current world date), endDay (last day of a multi-day event in the same month), ' +
-          'category (general|holiday|anniversary|historical|milestone), visible, recurring ' +
+          'category (general|holiday|anniversary|historical|milestone), visible, players (DSA5 ' +
+          '8.2+: user names to share with only these players), recurring ' +
           '(repeats every year).\n' +
           '- citydetails: name, kind (temples|inns|taverns|crafts|merchants|services|healers|' +
-          'travellers), typeText, description, gmNotes, img, visible, quality (0 poor - 5 ' +
+          'travellers), typeText, description, gmNotes, img, visible, players (DSA5 8.2+), ' +
+          'quality (0 poor - 5 ' +
           'exceptional, or null), price (0 very cheap, 2 average, 5 usury, or null).\n' +
           '- locations: name, subtitle, kind (settlement|landmark|dungeon|region|building|' +
           'other), region (one or more regions the location is grouped under), description, ' +
