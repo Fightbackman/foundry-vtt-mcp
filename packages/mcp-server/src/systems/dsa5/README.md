@@ -17,7 +17,8 @@ number:
   `get-character` reports the tradition from that ability; creating or updating an actor with
   the removed fields is refused with a hint to add the ability with `dsa5-add-items`.
 - 8.2 added per-player visibility (`visiblePlayers`) to personae, quests, almanac events and
-  city details; see Structured Journals.
+  city details, and a link to an almanac location (`locationUuid`) to quests and events; see
+  Structured Journals.
 
 ## Features
 
@@ -90,6 +91,20 @@ Behaviour worth knowing:
   like the system's own toggles; reading a quest takes `visiblePlayers` before
   `playerOwners`. On DSA5 8.1, quest `players` writes `playerOwners` as before and `players`
   on the other types is refused.
+- Sharing an entry of any writable type (`visible: true` or a non-empty `players`) also makes
+  its journal readable for players on DSA5 8.2, through the system's own helper that its eye
+  and player toggles use (it raises the journal's default ownership to Observer). Hiding or
+  editing an entry leaves ownership alone. DSA5 8.1 has no such step, so nothing is changed
+  there.
+- GM-only content stays as the system defines it: quests and city details have `gmNotes`
+  (GM Notes), personae and locations have `notes` (Player Notes) and personae can keep the
+  Garadan value GM-only (`showGaradanGMOnly`); quest objectives and quest links have their
+  own `visible`. The tools are GM-only and return all of it.
+- Location links (DSA5 8.2+): quests and events take `locationLink`, the almanac location by
+  name, entry key or `AlmanacLocation.<pageId>.<entryKey>` UUID (stored in `locationUuid`,
+  `null` clears it). Reading returns `locationLink` with the location's UUID, entry key and
+  name. It is separate from the free-text `location` field, which works as before. On DSA5
+  8.1 `locationLink` is refused.
 
 Locations (`dsalocation`, the almanac's "Orte") exist from DSA5 8.2 on; on older systems
 both tools return an error saying so. They are handled like the other types, with a few
@@ -106,8 +121,8 @@ specifics:
   create it fills name and image (and, for Atlas markers, subtitle and region) through the
   system's own model, so only `name` or `source` is required.
 - `visible: true` shares the entry with all players, `players` with the named users only
-  (`visiblePlayers`), `visible: false` hides it again. When an entry becomes visible, the
-  journal is made readable for players the way the system's eye toggle does it.
+  (`visiblePlayers`), `visible: false` hides it again. Sharing makes the journal readable for
+  players, as for the other types.
 - New location journals are added to the `locationJournals` almanac setting. The banner crop
   (`imageFrame`) is left alone, except that clearing `image` also clears it.
 

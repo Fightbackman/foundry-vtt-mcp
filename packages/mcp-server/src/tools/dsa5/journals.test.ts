@@ -208,6 +208,28 @@ describe('DSA5 journal tools', () => {
       expect(query).not.toHaveBeenCalled();
     });
 
+    it('forwards locationLink next to the free-text location on quests and events', async () => {
+      const quest = await tools.handleManage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'k',
+        data: { location: 'by the river', locationLink: 'Ferdok' },
+      });
+      const event = await tools.handleManage({
+        pageType: 'calendar',
+        action: 'update',
+        entryKey: 'k',
+        data: { locationLink: null },
+      });
+
+      expect(quest.success).toBe(true);
+      expect(event.success).toBe(true);
+      expect(query.mock.calls[0][1].data).toEqual({
+        location: 'by the river',
+        locationLink: 'Ferdok',
+      });
+    });
+
     it('accepts null to clear a date, unlink an actor or remove a contact', async () => {
       const quest = await tools.handleManage({
         pageType: 'quests',
