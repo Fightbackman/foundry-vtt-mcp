@@ -118,6 +118,7 @@ const questData = z
     pinToTop: z.boolean(),
     chapter: z.string(),
     location: z.string(),
+    locationLink: z.string().nullable(),
     tags,
     image: z.string().nullable(),
     startDate: partialDate,
@@ -159,6 +160,7 @@ const calendarData = z
     title: z.string().min(1),
     content: z.string(),
     location: z.string(),
+    locationLink: z.string().nullable(),
     date: z
       .object({ day: z.number().int().min(1), month, year: z.number().int() })
       .partial()
@@ -393,7 +395,9 @@ export class DSA5JournalTools {
           'created and added to the DSA5 almanac. update and delete need entryKey (from ' +
           'dsa5-journal-read); update changes only the fields passed in data. Text fields ' +
           'accept plain text or HTML. New quests, events and locations start hidden from players unless ' +
-          'visible is true. Needs Allow Write Operations.\n' +
+          'visible is true. Sharing an entry (visible true or players) on DSA5 8.2+ also ' +
+          'makes its journal readable for players, like the system does. Needs Allow Write ' +
+          'Operations.\n' +
           'data fields by pageType:\n' +
           '- personae: name, kind (person|creature), actor (name, id or UUID of the actor to ' +
           'link, null to unlink; the system then fills name, image, faction and subtitle from ' +
@@ -405,13 +409,16 @@ export class DSA5JournalTools {
           'remove}] (1 = unquenchable hatred, 5 = neutral, 9 = deep love).\n' +
           '- quests: title, summary, details, gmNotes, status (open|ended|failed), priority ' +
           '(main|side|personal), audience (party|players|gm), players (user names; on DSA5 8.2+ ' +
-          'the quest is then shown to only these players), visible, pinToTop, chapter, location, tags, image, startDate / targetDate ' +
+          'the quest is then shown to only these players), visible, pinToTop, chapter, location ' +
+          '(free text), locationLink (DSA5 8.2+: the almanac location by name, entryKey or ' +
+          'UUID, null to clear), tags, image, startDate / targetDate ' +
           '/ completionDate ({day?, month?, year?}, any part may be omitted; null clears), ' +
           'objectives (a list of texts to add, or {add:[{text,status,visible}], ' +
           'update:[{key,text,status,visible}], remove:[key]} with status open|done|failed), ' +
           'links (a list of names/UUIDs of actors, items, journals or pages to add, or ' +
           '{add:[{ref,visible}], remove:[key or uuid]}).\n' +
-          '- calendar: title, content, location, date {day, month, year} (defaults to the ' +
+          '- calendar: title, content, location (free text), locationLink (DSA5 8.2+, like ' +
+          'quests), date {day, month, year} (defaults to the ' +
           'current world date), endDay (last day of a multi-day event in the same month), ' +
           'category (general|holiday|anniversary|historical|milestone), visible, players (DSA5 ' +
           '8.2+: user names to share with only these players), recurring ' +

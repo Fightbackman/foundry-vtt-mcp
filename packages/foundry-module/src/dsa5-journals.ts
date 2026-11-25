@@ -150,7 +150,6 @@ const CITY_KINDS = [
 const GARADAN_VALUES = [0, 1, 2, 3, 4, 6];
 /** Values the dsalocation data model accepts for `kind`. */
 const LOCATION_KINDS = ['settlement', 'landmark', 'dungeon', 'region', 'building', 'other'];
-/** Prefix of the system's location UUIDs: `AlmanacLocation.<pageId>.<entryKey>`. */
 
 /** Aventurian months; the index is the stored (0-based) month. */
 const MONTHS = [
@@ -522,8 +521,19 @@ export class DSA5JournalAccess {
    */
   private supportsVisiblePlayers(config: PageTypeConfig): boolean {
     if (config.foundryType === 'dsalocation') return true;
+    return this.hasEntryField(config, 'visiblePlayers');
+  }
+
+  /** Whether the system's entry schema of this page type has the given field. */
+  private hasEntryField(config: PageTypeConfig, field: string): boolean {
     const entries = this.dataModel(config)?.schema?.fields?.[config.collection];
-    return !!entries?.element?.fields?.visiblePlayers;
+    return !!entries?.element?.fields?.[field];
+  }
+
+  /** Whether a write explicitly shares the entry with players (all or some). */
+  private sharesWithPlayers(data: Record<string, any>): boolean {
+    if (data.visible === false) return false;
+    return data.visible === true || (Array.isArray(data.players) && data.players.length > 0);
   }
 
   /** User names for a list of user ids (unknown ids are kept as they are). */
@@ -868,6 +878,7 @@ export class DSA5JournalAccess {
           category: category.name,
           categoryLabel: category.label,
           location: entry.location ?? '',
+          ...(await this.locationLinkField(entry)),
           visible: !!entry.visible,
           ...this.playersField(entry),
           recurring: !!entry.recurring,
@@ -1038,6 +1049,13 @@ export class DSA5JournalAccess {
     };
   }
 
+  /** `locationLink` for a read result, where a quest or event links a location (8.2+). */
+  private async locationLinkField(entry: any): Promise<{ locationLink?: any }> {
+    return entry?.locationUuid
+      ? { locationLink: await this.describeLocationRef(entry.locationUuid) }
+      : {};
+  }
+
   private async formatLocation(
     ref: PageRef,
     key: string,
@@ -1099,6 +1117,7 @@ export class DSA5JournalAccess {
       pinToTop: !!entry.pinToTop,
       chapter: entry.chapter ?? '',
       location: entry.location ?? '',
+      ...(await this.locationLinkField(entry)),
       tags: tagList(entry.tags),
       startDate: this.formatDate(entry.startDate),
       targetDate: this.formatDate(entry.targetDate),
@@ -1187,25 +1206,62 @@ export class DSA5JournalAccess {
     warnings: string[],
     key: string | null = null
   ): Promise<EntryWriter> {
-    let payload: Record<string, any>;
+    let write: EntryWriter;
     switch (pageType) {
       case 'personae':
-        return this.preparePersona(config, existing, data, warnings);
+        write = await this.preparePersona(config, existing, data, warnings);
+        break;
       case 'quests':
-        payload = await this.buildQuest(config, existing, data);
+        write = this.payloadWriter(config, await this.buildQuest(config, existing, data));
         break;
       case 'calendar':
-        payload = this.buildCalendarEvent(config, existing, data);
+        write = this.payloadWriter(config, await this.buildCalendarEvent(config, existing, data));
         break;
       case 'citydetails':
-        payload = this.buildCityDetail(config, existing, data);
+        write = this.payloadWriter(config, this.buildCityDetail(config, existing, data));
         break;
       case 'locations':
-        return this.prepareLocation(config, existing, data, warnings, key);
+        write = await this.prepareLocation(config, existing, data, warnings, key);
+        break;
       default:
         throw new Error(`${pageType} pages are read-only`);
     }
+    if (!this.sharesWithPlayers(data)) return write;
+    // Sharing an entry also lets players open its journal, like the system's own toggles.
+    return async (page, entryKey) => {
+      await write(page, entryKey);
+      await this.ensureReadable(config, page, warnings);
+    };
+  }
+
+  private payloadWriter(config: PageTypeConfig, payload: Record<string, any>): EntryWriter {
     return (page, key) => this.updateEntry(config, page, key, payload);
+  }
+
+  /**
+   * `locationLink` (DSA5 8.2+): the almanac location a quest or event takes place at,
+   * stored as `locationUuid`. The free-text `location` field is separate and unchanged.
+   */
+  private async applyLocationLink(
+    config: PageTypeConfig,
+    data: Record<string, any>,
+    payload: Record<string, any>
+  ): Promise<void> {
+    if (data.locationLink === undefined) return;
+    if (!this.hasEntryField(config, 'locationUuid')) {
+      throw new Error(
+        'locationLink needs DSA5 8.2 or later (this system cannot link entries to almanac ' +
+          'locations; use the free-text location field)'
+      );
+    }
+    if (!data.locationLink) {
+      payload.locationUuid = '';
+      return;
+    }
+    const reference = String(data.locationLink);
+    const location = this.findLocation(reference, 'locationLink');
+    if (!location) throw new Error(`locationLink: no location named "${reference}" found`);
+    payload.locationUuid = location.uuid;
   }
 
   private copyFields(
@@ -1363,6 +1419,7 @@ export class DSA5JournalAccess {
       html: ['details', 'gmNotes'],
       flags: ['visible', 'pinToTop'],
     });
+    await this.applyLocationLink(config, data, payload);
     if (data.status !== undefined) payload.status = enumIndex(QUEST_STATUS, data.status, 'status');
     if (data.priority !== undefined) {
       payload.priority = enumIndex(QUEST_PRIORITY, data.priority, 'priority');
@@ -1476,7 +1533,11 @@ export class DSA5JournalAccess {
     return Object.keys(result).length ? result : null;
   }
 
-  private buildCalendarEvent(config: PageTypeConfig, existing: any, data: Record<string, any>) {
+  private async buildCalendarEvent(
+    config: PageTypeConfig,
+    existing: any,
+    data: Record<string, any>
+  ) {
     const payload: Record<string, any> = {};
     if (!existing && !data.title) throw new Error('title is required');
 
@@ -1485,6 +1546,7 @@ export class DSA5JournalAccess {
       html: ['content'],
       flags: ['visible', 'recurring'],
     });
+    await this.applyLocationLink(config, data, payload);
     this.applyPlayerVisibility(config, data, payload);
     if (data.category !== undefined) {
       const category = data.category === 'event' ? 'anniversary' : data.category;
@@ -1540,29 +1602,14 @@ export class DSA5JournalAccess {
    */
   private async resolveParent(reference: string, ownKey: string | null): Promise<string> {
     const locations = this.locationIndex();
-    let uuid: string | null = null;
-
-    const byKey = locations.filter(
-      location => location.key === reference || location.uuid === reference
-    );
-    if (byKey.length === 1) uuid = byKey[0].uuid;
-    else if (reference.startsWith(ALMANAC_LOCATION_PREFIX)) {
-      throw new Error(`parent: no location with UUID "${reference}" found`);
-    } else {
-      const byName = locations.filter(location => sameText(location.entry?.name, reference));
-      if (byName.length > 1) {
-        const list = byName
-          .map(location => `${location.entry?.name} (entryKey ${location.key})`)
-          .join(', ');
-        throw new Error(`parent: "${reference}" matches several locations, pass its key: ${list}`);
-      }
-      if (byName.length === 1) uuid = byName[0].uuid;
-      else if (reference.includes('.') && (await this.resolveLocationDocument(reference))) {
+    const found = this.findLocation(reference, 'parent', locations);
+    if (!found) {
+      if (reference.includes('.') && (await this.resolveLocationDocument(reference))) {
         return reference;
-      } else {
-        throw new Error(`parent: no location named "${reference}" found`);
       }
+      throw new Error(`parent: no location named "${reference}" found`);
     }
+    const uuid = found.uuid;
 
     // Walk up from the new parent; reaching this entry again would make a loop.
     if (ownKey) {
@@ -1579,6 +1626,32 @@ export class DSA5JournalAccess {
       }
     }
     return uuid;
+  }
+
+  /**
+   * An almanac location given by entry key, `AlmanacLocation.` UUID or name; null when
+   * nothing matches. An unknown `AlmanacLocation.` UUID or an ambiguous name throws.
+   */
+  private findLocation(
+    reference: string,
+    field: string,
+    locations = this.locationIndex()
+  ): { key: string; uuid: string; entry: any } | null {
+    const byKey = locations.filter(
+      location => location.key === reference || location.uuid === reference
+    );
+    if (byKey.length === 1) return byKey[0];
+    if (reference.startsWith(ALMANAC_LOCATION_PREFIX)) {
+      throw new Error(`${field}: no location with UUID "${reference}" found`);
+    }
+    const byName = locations.filter(location => sameText(location.entry?.name, reference));
+    if (byName.length > 1) {
+      const list = byName
+        .map(location => `${location.entry?.name} (entryKey ${location.key})`)
+        .join(', ');
+      throw new Error(`${field}: "${reference}" matches several locations, pass its key: ${list}`);
+    }
+    return byName[0] ?? null;
   }
 
   /** Resolve `source` (the document bound to the location) given as a UUID or a name. */
@@ -1702,23 +1775,21 @@ export class DSA5JournalAccess {
       };
     }
 
-    const shared = !!entry.visible || (entry.visiblePlayers ?? []).length > 0;
-    const becomesShared = shared && (!existing || data.visible === true || data.players);
-    return async (page, key) => {
-      await this.updateEntry(config, page, key, entry);
-      if (becomesShared) await this.ensureReadable(config, page, warnings);
-    };
+    return this.payloadWriter(config, entry);
   }
 
   /**
-   * Players only see locations on journals they may observe; the system raises the journal's
-   * default ownership when the GM shares an entry, so do the same.
+   * Players only see entries on journals they may observe. DSA5 8.2 raises the journal's
+   * default ownership when the GM shares an entry of any list page type (a helper all its
+   * journal list models inherit), so do the same. DSA5 8.1 has no such step, nor does this.
    */
   private async ensureReadable(config: PageTypeConfig, page: any, warnings: string[]) {
-    const model = this.dataModel(config);
-    if (typeof model?.ensurePlayerReadable !== 'function') return;
+    const helper = [config, DSA5_JOURNAL_PAGE_TYPES.locations]
+      .map(candidate => this.dataModel(candidate))
+      .find(model => typeof model?.ensurePlayerReadable === 'function');
+    if (!helper) return;
     try {
-      await model.ensurePlayerReadable(page);
+      await helper.ensurePlayerReadable(page);
     } catch (error) {
       warnings.push(
         `Entry saved, but the journal could not be made readable for players: ${

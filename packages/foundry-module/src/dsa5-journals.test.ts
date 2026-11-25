@@ -1166,6 +1166,212 @@ describe('DSA5 journal pages', () => {
     });
   });
 
+  describe('sharing and location links', () => {
+    /** DSA5 8.2: every list model inherits ensurePlayerReadable; quests and events link locations. */
+    function stub82Models() {
+      const ensurePlayerReadable = vi.fn(async () => undefined);
+      const model = (collection: string, ...fields: string[]) => ({
+        ensurePlayerReadable,
+        schema: {
+          fields: {
+            [collection]: {
+              element: {
+                fields: Object.fromEntries(['visiblePlayers', ...fields].map(f => [f, {}])),
+              },
+            },
+          },
+        },
+      });
+      vi.stubGlobal('CONFIG', {
+        JournalEntryPage: {
+          dataModels: {
+            dsaquestlog: model('quests', 'locationUuid'),
+            dsapersonaedramatis: model('personae'),
+            dsacalendar: model('calendarentries', 'locationUuid'),
+            citydetails: model('details'),
+            dsalocation: model('locations'),
+          },
+        },
+      });
+      return ensurePlayerReadable;
+    }
+
+    /** DSA5 8.1: list models without visiblePlayers, locationUuid or ensurePlayerReadable. */
+    function stub81Models() {
+      const model = (collection: string) => ({
+        schema: { fields: { [collection]: { element: { fields: { visible: {} } } } } },
+      });
+      vi.stubGlobal('CONFIG', {
+        JournalEntryPage: {
+          dataModels: {
+            dsaquestlog: model('quests'),
+            dsapersonaedramatis: model('personae'),
+            dsacalendar: model('calendarentries'),
+            citydetails: model('details'),
+          },
+        },
+      });
+    }
+
+    function world() {
+      const pages = makeJournal('j1', 'Campaign', [
+        {
+          id: 'pq',
+          name: 'Quests',
+          type: 'dsaquestlog',
+          system: { quests: { q1: { title: 'Q' } } },
+        },
+        { id: 'pp', name: 'Personae', type: 'dsapersonaedramatis', system: { personae: {} } },
+        { id: 'pc', name: 'Calendar', type: 'dsacalendar', system: { calendarentries: {} } },
+        { id: 'pd', name: 'City', type: 'citydetails', system: { details: {} } },
+      ]);
+      const places = makeJournal('j2', 'Places', [
+        {
+          id: 'pl',
+          name: 'Places',
+          type: 'dsalocation',
+          system: { locations: { fer: { name: 'Ferdok' }, gar: { name: 'Gareth' } } },
+        },
+      ]);
+      stubWorld({ journals: [pages, places] });
+      return { pages, places };
+    }
+
+    const page = (journal: any, id: string) =>
+      journal.pages.contents.find((candidate: any) => candidate.id === id);
+
+    it('makes the journal readable when an entry of any type is shared (8.2)', async () => {
+      const { pages } = world();
+      const ensure = stub82Models();
+      const shares: Array<[any, string, Record<string, any>]> = [
+        ['personae', 'pp', { name: 'Alrik', visible: true }],
+        ['quests', 'pq', { title: 'Hunt', players: ['Alrik'] }],
+        ['calendar', 'pc', { title: 'Feast', visible: true }],
+        ['citydetails', 'pd', { name: 'Inn', visible: true }],
+      ];
+      for (const [pageType, pageId, data] of shares) {
+        ensure.mockClear();
+        const result = await access().manage({ pageType, action: 'create', data });
+        expect(result.success).toBe(true);
+        expect(ensure).toHaveBeenCalledWith(page(pages, pageId));
+      }
+    });
+
+    it('leaves ownership alone when an entry is hidden or only edited (8.2)', async () => {
+      world();
+      const ensure = stub82Models();
+
+      await access().manage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'q1',
+        data: { visible: false },
+      });
+      await access().manage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'q1',
+        data: { summary: 'More' },
+      });
+      await access().manage({ pageType: 'citydetails', action: 'create', data: { name: 'Inn' } });
+
+      expect(ensure).not.toHaveBeenCalled();
+    });
+
+    it('shares entries on 8.1 without an ownership step', async () => {
+      const { pages } = world();
+      stub81Models();
+
+      const result = await access().manage({
+        pageType: 'calendar',
+        action: 'create',
+        data: { title: 'Feast', visible: true },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.warnings).toBeUndefined();
+      expect(page(pages, 'pc').system.calendarentries[result.entryKey].visible).toBe(true);
+    });
+
+    it('links quests and events to almanac locations and reads them back (8.2)', async () => {
+      const { pages } = world();
+      stub82Models();
+
+      const quest = await access().manage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'q1',
+        data: { locationLink: 'ferdok', location: 'by the river' },
+      });
+      const event = await access().manage({
+        pageType: 'calendar',
+        action: 'create',
+        data: { title: 'Feast', locationLink: 'AlmanacLocation.pl.gar' },
+      });
+
+      expect(page(pages, 'pq').system.quests.q1).toMatchObject({
+        locationUuid: 'AlmanacLocation.pl.fer',
+        location: 'by the river',
+      });
+      expect(quest.entry).toMatchObject({
+        location: 'by the river',
+        locationLink: { uuid: 'AlmanacLocation.pl.fer', entryKey: 'fer', name: 'Ferdok' },
+      });
+      expect(event.entry.locationLink).toMatchObject({ entryKey: 'gar', name: 'Gareth' });
+
+      await access().manage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'q1',
+        data: { locationLink: null },
+      });
+      expect(page(pages, 'pq').system.quests.q1.locationUuid).toBe('');
+    });
+
+    it('rejects unknown location links (8.2)', async () => {
+      world();
+      stub82Models();
+
+      const result = await access().manage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'q1',
+        data: { locationLink: 'Punin' },
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        error: expect.stringContaining('locationLink: no location named "Punin"'),
+      });
+    });
+
+    it('refuses locationLink on 8.1 but keeps the free-text location', async () => {
+      const { pages } = world();
+      stub81Models();
+
+      const refused = await access().manage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'q1',
+        data: { locationLink: 'Ferdok' },
+      });
+      const text = await access().manage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'q1',
+        data: { location: 'Ferdok' },
+      });
+
+      expect(refused).toMatchObject({
+        success: false,
+        error: expect.stringContaining('needs DSA5 8.2'),
+      });
+      expect(text.success).toBe(true);
+      expect(page(pages, 'pq').system.quests.q1.location).toBe('Ferdok');
+      expect(text.entry).not.toHaveProperty('locationLink');
+    });
+  });
+
   describe('deleting and permissions', () => {
     const questJournal = () =>
       makeJournal('j1', 'Quests', [
