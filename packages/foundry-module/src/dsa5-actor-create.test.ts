@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDsa5Actor, createDsa5Actors } from './dsa5-actor-create.js';
+import { assertDsa5ActorFields, createDsa5Actor, createDsa5Actors } from './dsa5-actor-create.js';
 import { FoundryDataAccess } from './data-access.js';
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -365,5 +365,35 @@ describe('FoundryDataAccess.createActorFromData applySystemDefaults', () => {
 
     expect(coreCreate).toHaveBeenCalledOnce();
     expect(createCalls).toHaveLength(0);
+  });
+});
+
+describe('assertDsa5ActorFields', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const model = (fields: string[]) => ({
+    schema: { fields: Object.fromEntries(fields.map(field => [field, {}])) },
+  });
+
+  it('accepts tradition fields where the data model has them (DSA5 8.1)', () => {
+    vi.stubGlobal('CONFIG', {
+      Actor: { dataModels: { character: model(['status', 'tradition', 'guidevalue']) } },
+    });
+    expect(() =>
+      assertDsa5ActorFields('character', { tradition: { magical: 'Gildenmagier' } })
+    ).not.toThrow();
+  });
+
+  it('refuses tradition fields DSA5 8.2 removed from the actor', () => {
+    vi.stubGlobal('CONFIG', { Actor: { dataModels: { character: model(['status']) } } });
+    expect(() =>
+      assertDsa5ActorFields('character', { tradition: { magical: 'X' }, guidevalue: {} })
+    ).toThrow(/tradition, guidevalue.*Tradition special ability/);
+    expect(() => assertDsa5ActorFields('character', { status: {} })).not.toThrow();
+  });
+
+  it('does nothing without data models', () => {
+    vi.stubGlobal('CONFIG', { Actor: {} });
+    expect(() => assertDsa5ActorFields('character', { tradition: {} })).not.toThrow();
   });
 });

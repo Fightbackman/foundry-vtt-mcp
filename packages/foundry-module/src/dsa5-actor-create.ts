@@ -109,6 +109,26 @@ async function addCallerItems(actor: any, items: any[]): Promise<void> {
   if (creates.length > 0) await actor.createEmbeddedDocuments('Item', creates);
 }
 
+/** Actor fields DSA5 8.2 moved onto the Tradition special ability item. */
+const TRADITION_ACTOR_FIELDS = ['tradition', 'guidevalue', 'energyfactor', 'happyTalents'];
+
+/**
+ * Refuse tradition fields the actor's data model no longer has (DSA5 8.2+): Foundry would
+ * drop them silently. On 8.1 the fields exist and nothing is checked.
+ */
+export function assertDsa5ActorFields(type: unknown, system: unknown): void {
+  if (!system || typeof system !== 'object') return;
+  const fields = (globalThis as any).CONFIG?.Actor?.dataModels?.[String(type)]?.schema?.fields;
+  if (!fields) return;
+  const removed = TRADITION_ACTOR_FIELDS.filter(key => key in system && !(key in fields));
+  if (removed.length) {
+    throw new Error(
+      `This DSA5 version no longer stores ${removed.join(', ')} on the actor; the tradition ` +
+        'is a Tradition special ability item now (add it with dsa5-add-items).'
+    );
+  }
+}
+
 /**
  * Create one DSA5 actor through the system's own creation path and add the caller's
  * items. If adding the items fails, the half-created actor is deleted again.
@@ -121,6 +141,7 @@ export async function createDsa5Actor(data: Dsa5ActorCreateData, items: any[] = 
     item => item && typeof item === 'object'
   );
 
+  assertDsa5ActorFields(createData.type, createData.system);
   const tracksWounds = WOUNDED_ACTOR_TYPES.has(createData.type);
   const requestedWounds = explicitWoundsValue(createData.system);
 

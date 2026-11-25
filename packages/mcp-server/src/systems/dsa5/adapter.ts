@@ -283,12 +283,28 @@ export class DSA5Adapter implements SystemAdapter {
     };
   }
 
-  /** Magical / clerical tradition names, leaving out the empty defaults. */
-  private static tradition(system: any): Record<string, string> {
+  /**
+   * Magical / clerical tradition names, leaving out the empty defaults. DSA5 8.1 stores
+   * them on the actor (system.tradition); 8.2 removed that field and takes the tradition
+   * from the actor's one Tradition special ability (isTradition, category magical/clerical).
+   */
+  private static tradition(system: any, items: unknown): Record<string, string> {
     const tradition: Record<string, string> = {};
+    const list = Array.isArray(items) ? items : [];
     for (const kind of ['magical', 'clerical'] as const) {
       const name = system.tradition?.[kind];
-      if (typeof name === 'string' && name.trim()) tradition[kind] = name;
+      if (typeof name === 'string' && name.trim()) {
+        tradition[kind] = name;
+        continue;
+      }
+      const abilities = list.filter(
+        item =>
+          item?.type === 'specialability' &&
+          item.system?.isTradition === true &&
+          item.system?.category?.value === kind
+      );
+      // Like the system, only a single Tradition ability of a kind counts.
+      if (abilities.length === 1 && abilities[0].name) tradition[kind] = abilities[0].name;
     }
     return tradition;
   }
@@ -414,7 +430,7 @@ export class DSA5Adapter implements SystemAdapter {
     }
 
     // Tradition (magical/clerical)
-    const tradition = DSA5Adapter.tradition(system);
+    const tradition = DSA5Adapter.tradition(system, actorData.items);
     if (Object.keys(tradition).length > 0) {
       stats.tradition = tradition;
     }
@@ -540,8 +556,11 @@ export class DSA5Adapter implements SystemAdapter {
       '  status.<key>.initial or .modifier have an effect.',
       '  Rüstungsschutz and Belastung are derived from worn armor items (system.worn.value, protection,',
       '  encumbrance); there is no armor field on the actor (system.totalArmor is only the effect bonus).',
-      '  tradition → system.tradition {magical, clerical}; guidevalue {magical, clerical} names the',
-      '  Leiteigenschaft (mu…kk) that AsP/KaP are computed from.',
+      '  tradition → system.tradition {magical, clerical} on DSA5 8.1 only; guidevalue {magical,',
+      '  clerical} names the Leiteigenschaft (mu…kk) that AsP/KaP are computed from. DSA5 8.2',
+      '  removed tradition, guidevalue, energyfactor and happyTalents from the actor: there the',
+      '  tradition is a Tradition special ability item (system.isTradition, category.value',
+      '  magical|clerical, guidevalue, energyfactor, happyTalents); add it with dsa5-add-items.',
       '',
       'ITEMS: skill (Talent), combatskill, spell, liturgy, ritual, ceremony, advantage, disadvantage,',
       '  specialability, meleeweapon, rangeweapon, armor, equipment, trait (creatures), …',
