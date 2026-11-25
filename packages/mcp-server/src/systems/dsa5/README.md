@@ -6,6 +6,19 @@ DSA5 (Das Schwarze Auge 5) support for Foundry VTT MCP integration.
 
 This adapter implements the v0.6.0 Registry Pattern to provide system-specific support for DSA5 characters and creatures in the Foundry VTT MCP server.
 
+Supported DSA5 system versions: 8.1 and 8.2. Where 8.2 changed the data model, the module
+detects the shape (which fields the system's data models have) rather than the version
+number:
+
+- 8.2 removed `tradition`, `guidevalue`, `energyfactor` and `happyTalents` from the actor.
+  The tradition is then the actor's single Tradition special ability (`isTradition`, with
+  `category.value` `magical` / `clerical` and its own `guidevalue`, `energyfactor` and
+  `happyTalents`), from which the system derives the actor's `guidevalue` / `energyfactor`.
+  `get-character` reports the tradition from that ability; creating or updating an actor with
+  the removed fields is refused with a hint to add the ability with `dsa5-add-items`.
+- 8.2 added per-player visibility (`visiblePlayers`) to personae, quests, almanac events and
+  city details; see Structured Journals.
+
 ## Features
 
 ### Character Statistics Extraction
@@ -69,6 +82,14 @@ Behaviour worth knowing:
 - Quest dates are partial: only the parts passed are written. Calendar events always store a
   complete date, from which the system derives the day of the year.
 - New quests and events start hidden from players, matching the system's own "new entry".
+- Per-player visibility (DSA5 8.2+): personae, quests, events and city details take
+  `players` like locations do (`visible: true` alone shares with all players, `players` with
+  the named users only, stored in `visiblePlayers`), and reading them returns `players`.
+  Quests also keep the 8.1 field `playerOwners` in step and set the audience from the
+  visibility (all players `party`, some `players`, nobody `gm`) unless `audience` is passed,
+  like the system's own toggles; reading a quest takes `visiblePlayers` before
+  `playerOwners`. On DSA5 8.1, quest `players` writes `playerOwners` as before and `players`
+  on the other types is refused.
 
 Locations (`dsalocation`, the almanac's "Orte") exist from DSA5 8.2 on; on older systems
 both tools return an error saying so. They are handled like the other types, with a few
@@ -161,6 +182,7 @@ system.details.career.value      → Profession (IMPORTANT: "career", not "profe
 system.details.experience.total  → Total Adventure Points (AP)
 system.details.experience.spent  → Spent AP (available = total − spent, derived)
 system.creatureClass.value       → Creature class (creatures only)
+system.tradition.{magical,clerical} → Tradition (DSA5 8.1; 8.2: the Tradition special ability)
 ```
 
 ### Combat
