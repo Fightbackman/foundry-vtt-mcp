@@ -987,6 +987,185 @@ describe('DSA5 journal pages', () => {
     });
   });
 
+  describe('per-player visibility (DSA5 8.2)', () => {
+    /** DSA5 8.2 data models: each entry schema has a visiblePlayers list. */
+    function stubVisiblePlayersModels() {
+      const withPlayers = (collection: string) => ({
+        schema: { fields: { [collection]: { element: { fields: { visiblePlayers: {} } } } } },
+      });
+      vi.stubGlobal('CONFIG', {
+        JournalEntryPage: {
+          dataModels: {
+            dsaquestlog: withPlayers('quests'),
+            dsapersonaedramatis: withPlayers('personae'),
+            dsacalendar: withPlayers('calendarentries'),
+            citydetails: withPlayers('details'),
+          },
+        },
+      });
+    }
+
+    function twoPlayers() {
+      const users = [
+        { id: 'gm', name: 'GM', isGM: true },
+        { id: 'u1', name: 'Alrik' },
+        { id: 'u2', name: 'Bosper' },
+      ];
+      (globalThis as any).game.users = {
+        contents: users,
+        get: (id: string) => users.find(user => user.id === id),
+      };
+    }
+
+    it('shares a quest with chosen players in visiblePlayers and playerOwners', async () => {
+      const journal = makeJournal('j1', 'Quests', [
+        { id: 'p1', name: 'Log', type: 'dsaquestlog', system: { quests: {} } },
+      ]);
+      stubWorld({ journals: [journal] });
+      stubVisiblePlayersModels();
+      twoPlayers();
+
+      const result = await access().manage({
+        pageType: 'quests',
+        action: 'create',
+        data: { title: 'Find the amulet', players: ['alrik'] },
+      });
+
+      expect(result.success).toBe(true);
+      expect(journal.pages.contents[0].system.quests[result.entryKey]).toMatchObject({
+        visible: true,
+        visiblePlayers: ['u1'],
+        playerOwners: ['u1'],
+        audience: 1,
+      });
+      expect(result.entry.players).toEqual(['Alrik']);
+    });
+
+    it('stores "all players" as visible without a list and keeps an explicit audience', async () => {
+      const journal = makeJournal('j1', 'Quests', [
+        {
+          id: 'p1',
+          name: 'Log',
+          type: 'dsaquestlog',
+          system: { quests: { q1: { title: 'Q', visiblePlayers: ['u1'], playerOwners: ['u1'] } } },
+        },
+      ]);
+      stubWorld({ journals: [journal] });
+      stubVisiblePlayersModels();
+      twoPlayers();
+
+      await access().manage({
+        pageType: 'quests',
+        action: 'update',
+        entryKey: 'q1',
+        data: { players: ['Alrik', 'Bosper'], audience: 'gm' },
+      });
+
+      expect(journal.pages.contents[0].system.quests.q1).toMatchObject({
+        visible: true,
+        visiblePlayers: [],
+        playerOwners: [],
+        audience: 2,
+      });
+    });
+
+    it('reads quest players from visiblePlayers before the 8.1 playerOwners', async () => {
+      const journal = makeJournal('j1', 'Quests', [
+        {
+          id: 'p1',
+          name: 'Log',
+          type: 'dsaquestlog',
+          system: {
+            quests: {
+              q1: { title: 'New', visiblePlayers: ['u2'], playerOwners: ['u1'] },
+              q2: { title: 'Old', playerOwners: ['u1'] },
+            },
+          },
+        },
+      ]);
+      stubWorld({ journals: [journal] });
+      twoPlayers();
+
+      const read = await access().read({ pageType: 'quests' });
+
+      const players = Object.fromEntries(
+        read.entries.map((entry: any) => [entry.title, entry.players])
+      );
+      expect(players).toEqual({ New: ['Bosper'], Old: ['Alrik'] });
+    });
+
+    it('shares personae, events and city details with chosen players', async () => {
+      const journal = makeJournal('j1', 'Havena', [
+        {
+          id: 'p1',
+          name: 'People',
+          type: 'dsapersonaedramatis',
+          system: { personae: { k1: { name: 'Rondrian', visible: false } } },
+        },
+        { id: 'p2', name: 'Events', type: 'dsacalendar', system: { calendarentries: {} } },
+        {
+          id: 'p3',
+          name: 'Places',
+          type: 'citydetails',
+          system: { details: { d1: { name: 'Inn', visible: true, visiblePlayers: ['u1'] } } },
+        },
+      ]);
+      stubWorld({ journals: [journal] });
+      stubVisiblePlayersModels();
+      twoPlayers();
+
+      const persona = await access().manage({
+        pageType: 'personae',
+        action: 'update',
+        entryKey: 'k1',
+        data: { players: ['Bosper'] },
+      });
+      const event = await access().manage({
+        pageType: 'calendar',
+        action: 'create',
+        data: { title: 'Fair', players: ['Alrik'] },
+      });
+      await access().manage({
+        pageType: 'citydetails',
+        action: 'update',
+        entryKey: 'd1',
+        data: { visible: true },
+      });
+
+      const [people, events, places] = journal.pages.contents.map((page: any) => page.system);
+      expect(people.personae.k1).toMatchObject({ visible: true, visiblePlayers: ['u2'] });
+      expect(persona.entry.players).toEqual(['Bosper']);
+      expect(events.calendarentries[event.entryKey]).toMatchObject({
+        visible: true,
+        visiblePlayers: ['u1'],
+      });
+      expect(places.details.d1).toMatchObject({ visible: true, visiblePlayers: [] });
+    });
+
+    it('refuses players on DSA5 8.1 pages and leaves the read result unchanged', async () => {
+      const journal = makeJournal('j1', 'Havena', [
+        {
+          id: 'p1',
+          name: 'People',
+          type: 'dsapersonaedramatis',
+          system: { personae: { k1: { name: 'Rondrian', visible: true } } },
+        },
+      ]);
+      stubWorld({ journals: [journal] });
+
+      const result = await access().manage({
+        pageType: 'personae',
+        action: 'update',
+        entryKey: 'k1',
+        data: { players: ['Alrik'] },
+      });
+      const read = await access().read({ pageType: 'personae' });
+
+      expect(result).toMatchObject({ success: false, error: expect.stringContaining('8.2') });
+      expect(read.entries[0]).not.toHaveProperty('players');
+    });
+  });
+
   describe('deleting and permissions', () => {
     const questJournal = () =>
       makeJournal('j1', 'Quests', [
